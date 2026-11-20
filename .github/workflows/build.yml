@@ -1,7 +1,10 @@
-name: Build and smoke test
+name: Build, test, and publish Docker image
+
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,3 +25,32 @@ jobs:
         with:
           name: aurelis-symphony-java17
           path: build/install/aurelis-symphony/
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/terserahgw/aurelis-symphony:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/TerserahGw/aurelis-symphony
+            org.opencontainers.image.description=Aurelis Symphony Java 17 web music player
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
