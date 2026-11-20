@@ -21,6 +21,8 @@ A lightweight, self-hosted music web app with an original responsive UI, real pl
 - Optional multi-device library sync via bearer-token-protected JSON endpoint, **disabled by default**.
 - OpenAPI 3 endpoint, JSON REST API, Dockerfile, GitHub Actions, and no front-end build step.
 - Media URL discovery does **not** proxy arbitrary audio through the server. Browser playback depends on the provider, its restrictions, stream format and regional availability. **Searchable does not always mean playable.**
+- **Playback improvement:** YouTube and SoundCloud search results now open their official visible embedded players rather than attempting unreliable cross-device raw stream URLs. Use provider controls within the embedded player. Other providers still depend on the audio stream and may not play in-browser.
+- The **Aurelis Demos** catalog is only three bundled original MP3 tracks. It is not an online catalog of commercial music. The mobile Library page now also shows these demos alongside your playlists. Search defaults to YouTube; switch to **Aurelis Demos** to search the local files.
 
 ## Stack and resource budget
 
@@ -84,6 +86,19 @@ curl 'http://localhost:8080/api/v1/lyrics/lrc?track=Another%20Love&artist=Tom%20
 ```
 
 Full reference: [`docs/API.md`](docs/API.md) and live `/api/v1/openapi.json`.
+
+## Diagnose playback on your deployed site
+
+Open these URLs, replacing `YOUR_HOST` with the actual Altare domain:
+
+1. `https://YOUR_HOST/api/v1/health` should return `"ok":true`.
+2. `https://YOUR_HOST/api/v1/catalog` should return `"total":3` and three demo entries.
+3. `https://YOUR_HOST/demo/aether-bloom.mp3` should play an original bundled MP3 or download a valid audio file.
+4. Search for a song with **YouTube** or **SoundCloud** in Explore and tap Play. An official embedded player should appear; press its play button if autoplay is blocked.
+
+If (1) or (2) fails, inspect Altare application logs and route/port configuration. If (3) fails while (2) works, inspect MP3 serving, HTTP Range requests, or the deployed image version. If (4) fails, confirm the track permits embedding and that the provider is accessible in your browser/region. Official embeds cannot play videos/tracks blocked by their owners or by network policies.
+
+**Note:** Embedded playback is controlled by the provider's player; the custom Aurelis seek bar, auto-next and synchronized lyric timeline are **not** yet connected to it. They continue to function for locally hosted audio.
 
 ## Getting more music into the app
 
