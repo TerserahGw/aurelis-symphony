@@ -21,6 +21,11 @@ jobs:
           gradle-version: '9.2.1'
       - name: Build distribution and test
         run: gradle --no-daemon test installDist
+      - name: Validate browser scripts and smoke-test HTTP/audio routes
+        run: |
+          node --check src/main/resources/web/assets/app.js
+          node --check src/main/resources/web/assets/official-player.js
+          sh scripts/smoke-test.sh
       - uses: actions/upload-artifact@v4
         with:
           name: aurelis-symphony-java17
