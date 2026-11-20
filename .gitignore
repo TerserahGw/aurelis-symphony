@@ -1,0 +1,10 @@
+.gradle/
+build/
+out/
+*.class
+.env
+.idea/
+.DS_Store
+*.log
+/data/
+!data/.gitkeep

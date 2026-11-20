@@ -1,0 +1,5 @@
+[
+  {"id":"demo-aether","title":"Aether Bloom","artist":"Aurelis Studio","album":"First Light","duration":24,"audio":"/demo/aether-bloom.mp3","artwork":"","type":"demo","license":"Original Aurelis demo", "lyrics":[{"time":0,"endTime":4,"text":"In the hush before the morning"},{"time":4,"endTime":8,"text":"Every light begins to rise"},{"time":8,"endTime":12,"text":"Let the little moments linger"},{"time":12,"endTime":16,"text":"Like constellations in our eyes"},{"time":16,"endTime":20,"text":"And the world becomes a melody"},{"time":20,"endTime":24,"text":"When we give ourselves the time"}]},
+  {"id":"demo-quiet","title":"Quiet Constellations","artist":"Aurelis Studio","album":"First Light","duration":22,"audio":"/demo/quiet-constellations.mp3","artwork":"","type":"demo","license":"Original Aurelis demo"},
+  {"id":"demo-afterglow","title":"Afterglow","artist":"Aurelis Studio","album":"First Light","duration":26,"audio":"/demo/afterglow.mp3","artwork":"","type":"demo","license":"Original Aurelis demo"}
+]
