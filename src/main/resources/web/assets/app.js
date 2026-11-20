@@ -9,7 +9,7 @@ const validImage = url => /^https:\/\//i.test(String(url||'')) ? String(url) : '
 const getLocal = (k, fallback) => { try { return JSON.parse(localStorage.getItem('aurelis:'+k)) ?? fallback; } catch { return fallback; } };
 const putLocal = (k, value) => { try { localStorage.setItem('aurelis:'+k, JSON.stringify(value)); } catch {} };
 const audio = $('audio');
-let catalog=[], visible=[], current=null, currentView='home', activeFilter='all', source='catalog', playing=false;
+let catalog=[], visible=[], current=null, currentView='home', activeFilter='all', source='youtube', playing=false;
 let favorites=new Set(getLocal('favorites',[])), history=getLocal('history',[]), playlists=getLocal('playlists',[]);
 let trackCache=getLocal('trackCache',{}), actionTrack=null;
 let queue=getLocal('queue',[]), autoQueue=[], shuffle=getLocal('shuffle',false), repeat=getLocal('repeat',false);
@@ -32,6 +32,9 @@ async function init() {
   if($('cloudSync').checked)await pullCloud();
   if('mediaSession' in navigator){navigator.mediaSession.setActionHandler('play',()=>audio.play().catch(()=>{}));navigator.mediaSession.setActionHandler('pause',()=>audio.pause());navigator.mediaSession.setActionHandler('nexttrack',next);navigator.mediaSession.setActionHandler('previoustrack',previous);}
 }
+function trackCards(tracks){return tracks.map((t,i)=>`<article class="music-card" style="animation-delay:${Math.min(i*28,240)}ms" data-id="${safe(t.id)}">
+    ${cover(t,'card-art')}<button class="card-add" data-action="menu" data-index="${i}" title="More actions" aria-label="Actions for ${safe(t.title)}">${icon('plus')}</button><span class="card-duration" style="left:auto;right:16px">${duration(t)}</span><button class="card-play" title="Play ${safe(t.title)}" data-action="play" data-index="${i}" aria-label="Play ${safe(t.title)}">${icon('play')}</button>
+    <div class="card-info"><div><h3 title="${safe(t.title)}">${safe(t.title)}</h3><p>${safe(t.artist||'Unknown artist')}</p></div><button class="icon-button card-more ${favorites.has(t.id)?'card-liked':''}" data-action="like" data-index="${i}" aria-label="${favorites.has(t.id)?'Unlike':'Like'} ${safe(t.title)}" title="Like">${icon('heart')}</button></div></article>`).join('');}
 function render(){
   let tracks=visible;
   if(activeFilter==='favorites'&&currentView!=='favorites')tracks=tracks.filter(t=>favorites.has(t.id));
@@ -39,15 +42,14 @@ function render(){
   const title=currentView==='favorites'?'Songs you love':currentView==='library'?'Your collections':currentView==='playlist'?(playlists.find(p=>p.id===window.activePlaylistId)?.name||'Your playlist'):currentView==='explore'?'Explore the universe':'Find something beautiful';
   $('listTitle').textContent=title;
   if(currentView==='library'){
-    $('resultsStatus').textContent=playlists.length+' playlists';
-    $('musicGrid').innerHTML=`<button class="playlist-creation" data-create-playlist="true"><span>+</span><strong>Create playlist</strong><small>Start something new</small></button>`+playlists.map(p=>`<button class="playlist-creation playlist-card" data-playlistcard="${safe(p.id)}"><span>♫</span><strong>${safe(p.name)}</strong><small>${p.tracks.length} tracks</small></button>`).join('');
+    $('resultsStatus').textContent=playlists.length+' playlists · '+catalog.length+' demo tracks';
+    $('musicGrid').innerHTML=`<button class="playlist-creation" data-create-playlist="true"><span>+</span><strong>Create playlist</strong><small>Start something new</small></button>`+playlists.map(p=>`<button class="playlist-creation playlist-card" data-playlistcard="${safe(p.id)}"><span>♫</span><strong>${safe(p.name)}</strong><small>${p.tracks.length} tracks</small></button>`).join('')+'<div class="library-demo-label">BUNDLED DEMO TRACKS · Play these to check that local audio works. For online songs choose YouTube or SoundCloud in Explore.</div>'+trackCards(catalog);
+    window.displayedTracks=catalog;
     return;
   }
   $('resultsStatus').textContent=`${tracks.length} ${tracks.length===1?'track':'tracks'}`;
   if(!tracks.length){$('musicGrid').innerHTML=empty('✧',currentView==='favorites'?'No liked songs yet':'A quiet moment','Try another search or save songs you love.');return;}
-  $('musicGrid').innerHTML=tracks.map((t,i)=>`<article class="music-card" style="animation-delay:${Math.min(i*28,240)}ms" data-id="${safe(t.id)}">
-    ${cover(t,'card-art')}<button class="card-add" data-action="menu" data-index="${i}" title="More actions" aria-label="Actions for ${safe(t.title)}">${icon('plus')}</button><span class="card-duration" style="left:auto;right:16px">${duration(t)}</span><button class="card-play" title="Play ${safe(t.title)}" data-action="play" data-index="${i}" aria-label="Play ${safe(t.title)}">${icon('play')}</button>
-    <div class="card-info"><div><h3 title="${safe(t.title)}">${safe(t.title)}</h3><p>${safe(t.artist||'Unknown artist')}</p></div><button class="icon-button card-more ${favorites.has(t.id)?'card-liked':''}" data-action="like" data-index="${i}" aria-label="${favorites.has(t.id)?'Unlike':'Like'} ${safe(t.title)}" title="Like">${icon('heart')}</button></div></article>`).join('');
+  $('musicGrid').innerHTML=trackCards(tracks);
   window.displayedTracks=tracks;
 }
 function findTrack(id){return [...catalog,...visible,...queue,...autoQueue].find(t=>t?.id===id)||trackCache[id]||null;}
@@ -59,7 +61,7 @@ function setView(view){currentView=view;$$('[data-view]').forEach(b=>b.classList
   else if(view==='home'){$('hero').hidden=false;activeFilter='all';$$('.filter').forEach(b=>b.classList.toggle('active',b.dataset.filter==='all'));}
   else if(view==='library'){$('hero').hidden=true;visible=[...catalog];}
   else if(view==='favorites'){$('hero').hidden=true;visible=[...catalog,...history.map(findTrack).filter(Boolean),...queue].filter((v,i,a)=>v&&favorites.has(v.id)&&a.findIndex(t=>t.id===v.id)===i);}
-  if(view==='home'){source='catalog';$('musicSource').value='catalog';$('searchInput').value='';visible=[...catalog];}
+  if(view==='home'){source='youtube';$('musicSource').value='youtube';$('searchInput').value='';visible=[...catalog];}
   render();
 }
 function showPanel(panel='lyrics'){$('lyricsPanel').classList.add('open');$$('.panel-tab').forEach(x=>x.classList.toggle('active',x.dataset.panel===panel));$$('.panel-view').forEach(x=>x.classList.toggle('active',x.id===(panel==='lyrics'?'lyricsView':'queueView')));if(panel==='queue')renderQueue();}
@@ -74,11 +76,17 @@ function updatePlayer(){
 }
 async function playTrack(t){
   if(!t)return;const seq=++playSequence;
+  window.AurelisEmbeds?.close();
   current=t;playing=false;audio.pause();audio.removeAttribute('src');audio.load();
   trackCache[t.id]=t;history=[t.id,...history.filter(x=>x!==t.id)].slice(0,40);save();updatePlayer();makeAutoQueue();
   updateLyricHeader();loadLyrics();
   if(t.audio){audio.src=t.audio;try{await audio.play();if(seq!==playSequence)return;}catch(e){if(seq===playSequence)toast('Tap play again to start audio.');}return;}
   if(!t.url){toast('This song has no playable audio source.');return;}
+  if(window.AurelisEmbeds?.open(t)){
+    $('lyricNote').textContent='OFFICIAL EMBED · LYRICS TIMING IS NOT CONNECTED TO THIS PLAYER';
+    toast('Official player opened. Tap Play inside the embedded player if autoplay is blocked.');
+    return;
+  }
   toast('Checking available audio…');
   try{
     const result=await api('/api/v1/info?url='+enc(t.url));if(seq!==playSequence)return;
@@ -92,7 +100,7 @@ function unplayable(t){
   toast('Playback is restricted by the music provider. Open the original source.');
   $('lyricNote').innerHTML=`PLAYBACK UNAVAILABLE · <a class="external-link" href="${safe(t.url||'#')}" target="_blank" rel="noopener">OPEN ORIGINAL ${icon('external')}</a>`;
 }
-function togglePlay(){if(!current){playTrack(visible[0]||catalog[0]);return;}if(audio.paused)audio.play().catch(()=>toast('This source cannot be played here.'));else audio.pause();}
+function togglePlay(){if(!current){playTrack(visible[0]||catalog[0]);return;}if(window.AurelisEmbeds?.active()){window.AurelisEmbeds.focus();toast('Use the controls in the official player.');return;}if(audio.paused)audio.play().catch(()=>toast('This source cannot be played here.'));else audio.pause();}
 function next(){let item=queue.shift();if(!item){item=autoQueue.shift();}if(!item){if(!repeat){audio.pause();return;}item=current;}save();playTrack(item);}
 function previous(){if(audio.currentTime>3){audio.currentTime=0;return;}let prev=history.slice(1).map(findTrack).find(Boolean);if(prev)playTrack(prev);else audio.currentTime=0;}
 function openPlaylist(id){window.activePlaylistId=id;const p=playlists.find(p=>p.id===id);currentView='playlist';$('hero').hidden=true;visible=(p?.tracks||[]).map(x=>typeof x==='string'?findTrack(x):x).filter(Boolean);renderPlaylists();render();}
@@ -127,7 +135,7 @@ function renderLyrics(lines,meta={}){
     let wordMarkup=Array.isArray(l.words)&&l.words.length?l.words.map((w,j)=>`<span class="word" data-word="${j}" data-start="${Number(w.start)||0}" data-end="${Number(w.end)||0}">${safe(w.text)}</span>`).join(' '):safe(l.text);
     return `<div class="lyric-line future" data-line="${i}" data-start="${l.time===null?'':Number(l.time)||0}">${wordMarkup}${l.translation?`<p class="translation">${safe(l.translation)}</p>`:''}</div>`;
   }).join('');
-  $('lyricNote').textContent=`${safe(meta.source||'Aurelis').toUpperCase()} · ${meta.wordLevel?'WORD-SYNC':lyricSyncActive?'LINE-SYNC':'PLAIN LYRICS'}`;
+  $('lyricNote').textContent=window.AurelisEmbeds?.active()?'EMBEDDED PLAYBACK · LYRIC TIMING NOT CONNECTED':`${safe(meta.source||'Aurelis').toUpperCase()} · ${meta.wordLevel?'WORD-SYNC':lyricSyncActive?'LINE-SYNC':'PLAIN LYRICS'}`;
   syncLyrics(true);
 }
 function syncLyrics(force=false){if(!words.length||!lyricSyncActive)return;let now=audio.currentTime;
@@ -211,7 +219,7 @@ function setupEvents(){
   audio.addEventListener('pause',()=>{playing=false;updatePlayer();cancelAnimationFrame(animationId);animationId=null;});
   audio.addEventListener('timeupdate',setTimeUI);audio.addEventListener('durationchange',setTimeUI);
   audio.addEventListener('ended',()=>{if(repeat){audio.currentTime=0;audio.play().catch(()=>{});}else next();});
-  audio.addEventListener('error',()=>{if(current&&!current.audio)unplayable(current);else if(current)toast('This audio file could not be played.');});
+  audio.addEventListener('error',()=>{if(current&&!current.audio)unplayable(current);else if(current)toast('Local demo audio failed. Open /demo/aether-bloom.mp3 to check if the server serves MP3 files.');});
   document.addEventListener('keydown',e=>{let tag=document.activeElement?.tagName;if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(tag)){e.preventDefault();$('searchInput').focus();}if(e.code==='Space'&&!['INPUT','TEXTAREA','BUTTON','SELECT'].includes(tag)){e.preventDefault();togglePlay();}if(e.key==='Escape')closePanel();});
   window.addEventListener('storage',e=>{if(e.key==='aurelis:favorites'){favorites=new Set(getLocal('favorites',[]));render();updatePlayer();}});
   // Queue controls are discoverable with right-click on cards, while touch users can long-press.
