@@ -10,6 +10,7 @@ on:
       - src/main/resources/web/assets/preferences.css
       - src/main/resources/web/assets/lyrics-v23.css
       - src/main/resources/web/assets/glass-v24.css
+      - src/main/resources/web/assets/glass-v25.css
       - src/main/resources/web/assets/media-session.js
       - server/lyrics.mjs
       - server/vendor/lirik-sync.mjs
@@ -52,6 +53,42 @@ jobs:
             await page.locator('#playerTrack').click({timeout:10000});
             await page.waitForSelector('#fullPlayer.open',{timeout:8000});
             if(!await page.locator('#fpLyricsPane').isVisible())throw new Error('Lyrics not shown');
+            // Regression: fullscreen's direct listener and the document action
+            // delegate used to open AND immediately close the same popover.
+            const fullscreenTrack=await page.evaluate(()=>window.Aurelis.snapshot().current);
+            await page.locator('#fpMore').click({timeout:10000});
+            await page.locator('#trackPopover').waitFor({state:'visible',timeout:4000});
+            await page.waitForTimeout(120);
+            if(!await page.locator('#trackPopover').isVisible())
+              throw new Error('Fullscreen three-dot popover immediately closed');
+            if(await page.locator('#fpMore').getAttribute('aria-expanded')!=='true')
+              throw new Error('Fullscreen menu state not expanded');
+            if(!await page.locator('#trackPopover [data-menu=download-lyrics]').isVisible())
+              throw new Error('Fullscreen options missing');
+            const popupLayout=await page.locator('#trackPopover').evaluate(el=>{
+              const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,vw:innerWidth,vh:innerHeight};
+            });
+            if(popupLayout.x<0||popupLayout.y<0||popupLayout.x+popupLayout.w>popupLayout.vw+1
+               ||popupLayout.y+popupLayout.h>popupLayout.vh+2)
+              throw new Error('Fullscreen popover exceeds viewport '+JSON.stringify(popupLayout));
+            await page.locator('#trackPopover [data-menu=offset-plus]').click();
+            if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))
+              throw new Error('Fullscreen lyric offset button unresponsive');
+            // Restore the original offset so later baseline popover tests start at zero.
+            await page.locator('#trackPopover [data-menu=offset-reset]').click();
+            await page.locator('#fpMore').click();
+            await page.locator('#trackPopover').waitFor({state:'hidden',timeout:3000});
+            await page.locator('#fpMore').click();
+            await page.locator('#trackPopover').waitFor({state:'visible',timeout:3000});
+            const favoriteBefore=await page.evaluate(id=>window.Aurelis.snapshot().favorites.includes(id),fullscreenTrack.id);
+            await page.locator('#trackPopover [data-menu=like]').click();
+            const favoriteAfter=await page.evaluate(id=>window.Aurelis.snapshot().favorites.includes(id),fullscreenTrack.id);
+            if(favoriteAfter===favoriteBefore)throw new Error('Fullscreen menu favorite action did not work');
+            if(!await page.locator('#trackPopover').isHidden())throw new Error('Fullscreen popover stayed open after action');
+            const glass=await page.locator('.player-shell').evaluate(el=>
+              getComputedStyle(el).backdropFilter||getComputedStyle(el).webkitBackdropFilter);
+            if(!glass.includes('blur'))throw new Error('Expanded Ambient Glass missing on mini-player');
+
             if(await page.locator('.fp-line-progress').count())throw new Error('Line timed lyrics must not show fabricated progress');
             const sessionMeta=await page.evaluate(()=>{
               const track=window.Aurelis?.snapshot?.().current;
@@ -86,7 +123,10 @@ jobs:
             await page.locator('#fpRomanize').click();
             await page.locator('#fpTranslate').click();
             await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'.png'});
+            await page.locator('#fpMore').click();
+            await page.locator('#trackPopover').waitFor({state:'visible',timeout:3000});
             await page.locator('#fpClose').click();
+            await page.locator('#trackPopover').waitFor({state:'hidden',timeout:3000});
             await page.locator('#fullPlayer').waitFor({state:'hidden',timeout:4500});
             await page.locator('#settingsButton').click();
             await page.locator('#aurelisPreferences').waitFor({state:'visible',timeout:5000});

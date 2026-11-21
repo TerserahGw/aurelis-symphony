@@ -61,8 +61,10 @@ trackPopover.hidden=true;
 document.body.appendChild(trackPopover);
 let popoverAnchor=null;
 function closeSongPopover(){
-  trackPopover.hidden=true;popoverAnchor=null;
-  if(state.menuTrack?.id) state.menuTrack=null;
+  if(popoverAnchor?.isConnected)popoverAnchor.setAttribute('aria-expanded','false');
+  trackPopover.hidden=true;
+  popoverAnchor=null;
+  state.menuTrack=null;
 }
 function normalizeSong(t){
   let name=String(t?.title||'').toLowerCase().normalize('NFKD');
@@ -88,7 +90,9 @@ function uniqueRadio(items,forbidden=[],limit=8){
   }
   return result;
 }
-let searchTimer = null;
+let searchTimer=null;
+let searchController=null;
+let lastAudioProbeSequence=-1;
 let currentGenre = '';
 let playerInit = false;
 const genres = [
@@ -141,10 +145,19 @@ function toast(message, error = false) {
   setTimeout(() => item.remove(), 4200);
 }
 async function api(route, options = {}) {
-  const res = await fetch(route, { ...options, headers: { Accept: 'application/json', ...(options.headers || {}) } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || data.error || 'Tidak dapat menghubungi server');
-  return data;
+  // Bound network waits on mobile data and cancel obsolete search requests.
+  const timeout=AbortSignal.timeout(20_000);
+  const signal=options.signal?AbortSignal.any([options.signal,timeout]):timeout;
+  try{
+    const res=await fetch(route,{...options,signal,
+      headers:{Accept:'application/json',...(options.headers||{})}});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.message||data.error||'Tidak dapat menghubungi server');
+    return data;
+  }catch(error){
+    if(error?.name==='TimeoutError')throw new Error('Permintaan terlalu lama. Coba lagi.');
+    throw error;
+  }
 }
 function skeleton(count = 6) {
   return '<div class="album-grid">' + Array.from({ length: count }, () =>
@@ -276,25 +289,31 @@ function navigate(view, playlistId) {
   $('scrollArea').scrollTo({ top: 0, behavior: 'smooth' });
 }
 async function search(term) {
-  term = String(term || '').trim();
-  state.query = term;
-  if (term.length < 2) { state.searching = false; state.results = []; render(); return; }
-  const seq = ++state.sequence;
+  term=String(term||'').trim();
+  state.query=term;
+  const seq=++state.sequence;
+  searchController?.abort();
+  searchController=null;
+  if(term.length<2){state.searching=false;state.results=[];render();return;}
+  const controller=new AbortController();
+  searchController=controller;
   state.searching = true;
   state.view = 'search';
   render();
   try {
-    const data = await api('/api/v1/search?provider=youtube&q=' + encodeURIComponent(term) + '&limit=30');
+    const data=await api('/api/v1/search?provider=youtube&q='+encodeURIComponent(term)+'&limit=30',
+      {signal:controller.signal});
     if (seq !== state.sequence) return;
     state.results = uniq(data.tracks || []);
     state.results.forEach(remember);
     save();
   } catch (e) {
-    if (seq !== state.sequence) return;
-    state.results = [];
-    toast('Pencarian gagal: ' + e.message, true);
-  } finally {
-    if (seq === state.sequence) { state.searching = false; render(); }
+    if(seq!==state.sequence||controller.signal.aborted)return;
+    state.results=[];
+    toast('Pencarian gagal: '+e.message,true);
+  }finally{
+    if(searchController===controller)searchController=null;
+    if(seq===state.sequence){state.searching=false;render();}
   }
 }
 async function loadHome() {
@@ -360,7 +379,9 @@ function updateTime() {
 async function play(t) {
   if (!t) return;
   if (!t.id) return;
-  const seq = ++state.playSequence;
+  const seq=++state.playSequence;
+  lastAudioProbeSequence=-1;
+  closeSongPopover();
   state.current=t;
   // A listening session can be repeated in order or reshuffled after it ends.
   if(!state.playedCycle.some(x=>x?.id===t.id)){
@@ -582,8 +603,11 @@ function syncLyrics(force = false) {
 function showTrackMenu(t,anchor){
   if(!t||!anchor)return;
   if(!trackPopover.hidden&&popoverAnchor===anchor){closeSongPopover();return;}
+  if(!trackPopover.hidden)closeSongPopover();
   state.menuTrack=t;
   popoverAnchor=anchor;
+  anchor.setAttribute('aria-expanded','true');
+  anchor.setAttribute('aria-controls','trackPopover');
   if(validArt(t.artwork)){
     const art=String(t.artwork).replace(/["'()\\\s]/g,x=>encodeURIComponent(x));
     trackPopover.style.setProperty('--aurelis-ambient-art','url("'+art+'")');
@@ -620,10 +644,12 @@ function showTrackMenu(t,anchor){
   trackPopover.hidden=false;
   const box=anchor.getBoundingClientRect();
   const width=Math.min(265,window.innerWidth-22);
+  const visibleHeight=Math.max(220,window.visualViewport?.height||window.innerHeight);
+  trackPopover.style.maxHeight=Math.max(120,visibleHeight-24)+'px';
   const height=trackPopover.offsetHeight;
   const left=Math.min(window.innerWidth-width-11,Math.max(11,box.right-width));
   const below=box.bottom+8;
-  const top=below+height<window.innerHeight-12?below:Math.max(10,box.top-height-8);
+  const top=below+height<visibleHeight-12?below:Math.max(10,box.top-height-8);
   trackPopover.style.left=left+'px';
   trackPopover.style.top=Math.max(10,top)+'px';
 }
@@ -788,7 +814,10 @@ function setupEvents() {
   $('searchInput').addEventListener('input', event => {
     clearTimeout(searchTimer);
     const term = event.target.value;
-    if (!term.trim()) { state.query = ''; state.results = []; state.searching = false; navigate('search'); return; }
+    if(!term.trim()){
+      searchController?.abort();searchController=null;state.sequence++;
+      state.query='';state.results=[];state.searching=false;navigate('search');return;
+    }
     state.view = 'search';
     searchTimer = setTimeout(() => search(term), 390);
   });
@@ -844,7 +873,7 @@ function setupEvents() {
   });
   document.addEventListener('pointerdown',e=>{
     if(!trackPopover.hidden&&!trackPopover.contains(e.target)
-       &&!e.target.closest('[data-action=menu]'))closeSongPopover();
+       &&!e.target.closest('[data-action=menu],#fpMore'))closeSongPopover();
   },true);
   // ScrollIntoView from the browser can fire after a click. Only dismiss on
   // intentional wheel/touch gestures, not layout or programmatic scrolling.
@@ -865,24 +894,27 @@ function setupEvents() {
     if (state.repeat === 2) { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
   });
   audio.addEventListener('error', async () => {
-    if (!state.current || !audio.src) return;
-    const t = state.current;
-    const id = t.videoId || (String(t.id).startsWith('yt-') ? String(t.id).slice(3) : '');
-    state.panelError = 'Sumber audio gagal dimuat.';
-    if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-      try {
-        const result = await fetch('/api/v2/audio/' + id + '?probe=1');
-        const detail = await result.json();
-        if (state.current?.id === t.id && !detail.ok) {
-          state.panelError = detail.message || detail.code || state.panelError;
-        }
-      } catch {}
-    }
-    if (state.current?.id === t.id) {
-      toast(state.panelError, true);
-      emit('error');
-      if (state.drawer === 'now') renderPanel();
-    }
+    if(!state.current||!audio.src)return;
+    const t=state.current,seq=state.playSequence;
+    if(lastAudioProbeSequence===seq)return;
+    lastAudioProbeSequence=seq;
+    state.panelError='Sumber audio gagal dimuat.';
+    toast(state.panelError,true);
+    emit('error');
+    if(state.drawer==='now')renderPanel();
+    const id=t.videoId||(String(t.id).startsWith('yt-')?String(t.id).slice(3):'');
+    if(!/^[a-zA-Z0-9_-]{11}$/.test(id))return;
+    try{
+      const result=await fetch('/api/v2/audio/'+id+'?probe=1',
+        {signal:AbortSignal.timeout(12_000)});
+      const detail=await result.json().catch(()=>({}));
+      if(seq!==state.playSequence||state.current?.id!==t.id)return;
+      if(!result.ok||!detail.ok){
+        state.panelError=detail.message||detail.code||'Sumber YouTube membatasi akses audio.';
+        emit('error');
+        if(state.drawer==='now')renderPanel();
+      }
+    }catch{/* Diagnostic is best-effort; never block the player indefinitely. */}
   });
   document.addEventListener('keydown', e => {
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
@@ -914,7 +946,8 @@ function snapshot() {
 }
 window.Aurelis = Object.freeze({
   snapshot,play,toggle,next,previous,
-  openSongMenu(anchor){if(state.current)showTrackMenu(state.current,anchor);},
+  openSongMenu(anchor){if(state.current && anchor?.isConnected)showTrackMenu(state.current,anchor);},
+  closeSongMenu:closeSongPopover,
   seek(sec){ if (Number.isFinite(sec) && audio.seekable.length) audio.currentTime=Math.max(0,Math.min(sec,currentDuration())); },
   setVolume(value){ audio.volume=Math.max(0,Math.min(1,Number(value)||0)); $('volume').value=String(Math.round(audio.volume*100)); store('volume',audio.volume);emit('player'); },
   toggleLike(){like(state.current);},
@@ -958,5 +991,10 @@ async function boot() {
     }
   }).catch(() => {});
 }
-boot();
+boot().catch(error=>{
+  console.error('Aurelis initialization failed:',error);
+  const label=document.getElementById('sourceStatus');
+  if(label)label.textContent='Koneksi gagal · muat ulang halaman';
+  toast('Aurelis gagal memuat. Periksa koneksi lalu refresh.',true);
+});
 })();
