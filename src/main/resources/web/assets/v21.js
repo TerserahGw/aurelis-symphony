@@ -746,7 +746,14 @@ function setupEvents() {
     if(!trackPopover.hidden&&!trackPopover.contains(e.target)
        &&!e.target.closest('[data-action=menu]'))closeSongPopover();
   },true);
-  document.addEventListener('scroll',e=>{if(!trackPopover.hidden&&!trackPopover.contains(e.target))closeSongPopover();},true);
+  // ScrollIntoView from the browser can fire after a click. Only dismiss on
+  // intentional wheel/touch gestures, not layout or programmatic scrolling.
+  document.addEventListener('wheel',e=>{
+    if(!trackPopover.hidden&&!trackPopover.contains(e.target))closeSongPopover();
+  },{capture:true,passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!trackPopover.hidden&&!trackPopover.contains(e.target))closeSongPopover();
+  },{capture:true,passive:true});
   window.addEventListener('resize',()=>{if(!trackPopover.hidden)closeSongPopover();});
   $('settingsButton').addEventListener('click',()=>window.AurelisPreferences?.open());
   audio.addEventListener('play', () => { setPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
