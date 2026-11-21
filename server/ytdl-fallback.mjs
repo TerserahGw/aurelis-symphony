@@ -2,6 +2,7 @@
 // Uses @distube/ytdl-core 5.x. No other catalog, no auth cookies, no DRM bypass.
 // The module is imported lazily because its player discovery can be CPU-intensive.
 import { once } from 'node:events';
+import { contentDisposition } from './download.mjs';
 
 let enginePromise;
 let engine;
@@ -35,7 +36,7 @@ async function getEngine() {
   }
   return enginePromise;
 }
-export async function fallbackAudio({id,req,res,range,probe,signal}) {
+export async function fallbackAudio({id,req,res,range,probe,download=false,downloadTitle='',signal}) {
   const {client,Quality}=await getEngine();
   let info;
   try {
@@ -99,6 +100,7 @@ export async function fallbackAudio({id,req,res,range,probe,signal}) {
     if(req.method==='HEAD'){
       stream.destroy();
       const h={'Content-Type':mime,'Cache-Control':'no-store','Accept-Ranges':knownLength&&format.url?'bytes':'none'};
+      if(download)h['Content-Disposition']=contentDisposition(downloadTitle,id,mime);
       if(rangeInfo){
         h['Content-Range']='bytes '+rangeInfo.start+'-'+rangeInfo.end+'/'+length;
         h['Content-Length']=String(rangeInfo.end-rangeInfo.start+1);
@@ -111,6 +113,7 @@ export async function fallbackAudio({id,req,res,range,probe,signal}) {
       'X-Content-Type-Options':'nosniff',
       'Accept-Ranges':knownLength&&format.url?'bytes':'none'
     };
+    if(download)headers['Content-Disposition']=contentDisposition(downloadTitle,id,mime);
     if(rangeInfo){
       headers['Content-Range']='bytes '+rangeInfo.start+'-'+rangeInfo.end+'/'+length;
       headers['Content-Length']=String(rangeInfo.end-rangeInfo.start+1);
