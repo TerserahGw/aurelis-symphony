@@ -1,0 +1,87 @@
+/* Aurelis Symphony 2.4 | Ambient glass informed by current artwork and page.
+   The layers are translucent; do not turn them into opaque dark cards. */
+.asp-overlay {
+  background:rgba(7,11,14,.36)!important;
+  -webkit-backdrop-filter:blur(4px) saturate(1.14)!important;
+  backdrop-filter:blur(4px) saturate(1.14)!important;
+}
+.asp-panel {
+  position:relative;
+  isolation:isolate;
+  background:rgba(23,28,30,.63)!important;
+  border:1px solid rgba(221,249,236,.19)!important;
+  -webkit-backdrop-filter:blur(26px) saturate(1.4);
+  backdrop-filter:blur(26px) saturate(1.4);
+  box-shadow:0 28px 85px rgba(0,0,0,.43),inset 0 1px 0 rgba(251,255,252,.11)!important;
+}
+.asp-ambient {
+  position:absolute;inset:-22%;z-index:0;
+  overflow:hidden;pointer-events:none;
+  opacity:0;transition:opacity .6s ease;
+}
+.asp-ambient.has-art{opacity:.34}
+.asp-ambient img {
+  width:100%;height:100%;object-fit:cover;
+  filter:blur(70px) saturate(1.38) brightness(.85);
+  transform:scale(1.2);
+}
+.asp-panel:before {
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:linear-gradient(145deg,rgba(247,255,250,.045),transparent 39%,rgba(1,4,7,.25) 100%);
+}
+.asp-sidebar,.asp-main {position:relative;z-index:1}
+.asp-sidebar {background:rgba(15,22,23,.28)!important;border-color:rgba(255,255,255,.12)!important}
+.asp-header {background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.11)!important}
+.asp-action {
+  background:rgba(228,255,241,.075)!important;
+  border-color:rgba(255,255,255,.14)!important;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+}
+.asp-action:hover{background:rgba(217,254,232,.13)!important}
+.asp-nav button.active{background:rgba(176,244,207,.17)!important}
+.asp-switch{box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
+.asp-control select {
+  background:rgba(9,15,17,.49)!important;
+  border-color:rgba(227,255,239,.25)!important;
+}
+.song-popover {
+  position:fixed;isolation:isolate;overflow-y:auto;
+  background:rgba(28,34,36,.62)!important;
+  color:#edf7f1!important;
+  border-color:rgba(232,255,243,.23)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(1.46);
+  backdrop-filter:blur(22px) saturate(1.46);
+  box-shadow:0 21px 60px rgba(0,0,0,.43),inset 0 1px 0 rgba(255,255,255,.1)!important;
+}
+.song-popover:before{
+  content:"";position:absolute;inset:0;z-index:0;
+  pointer-events:none;
+  background:linear-gradient(150deg,rgba(245,255,248,.12) 0%,rgba(9,16,18,.23) 75%);
+}
+.song-popover .pop-ambient {
+  position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;
+  opacity:.33;mask-image:linear-gradient(#000,#000 73%,transparent 100%);
+}
+.song-popover .pop-ambient img {
+  width:160%;height:160%;position:absolute;left:-30%;top:-30%;
+  object-fit:cover;filter:blur(53px) saturate(1.55) brightness(.8);
+}
+.song-popover > :not(.pop-ambient){position:relative;z-index:1}
+.song-popover .pop-btn {border-radius:8px}
+.song-popover .pop-btn:hover,.song-popover .pop-btn:focus-visible {
+  background:rgba(242,255,246,.16)!important;
+}
+.song-popover .pop-title{border-color:rgba(255,255,255,.16)!important}
+.song-popover .pop-subtitle{color:#c0d6c9!important}
+.song-popover .pop-offset button{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2)}
+@media(max-width:650px){
+  .asp-panel{border-bottom:none!important;border-radius:21px 21px 0 0}
+  .asp-sidebar{background:rgba(13,19,21,.31)!important}
+  .asp-ambient.has-art{opacity:.29}
+}
+@media(prefers-reduced-transparency:reduce){
+  .asp-panel{background:rgba(26,33,34,.97)!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .song-popover{background:rgba(31,39,40,.97)!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .asp-ambient,.pop-ambient{display:none!important}
+}
+.aurelis-reduce-motion .asp-ambient{transition:none}
