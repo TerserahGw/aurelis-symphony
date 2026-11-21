@@ -603,6 +603,7 @@ function syncLyrics(force = false) {
 function showTrackMenu(t,anchor){
   if(!t||!anchor)return;
   if(!trackPopover.hidden&&popoverAnchor===anchor){closeSongPopover();return;}
+  if(!trackPopover.hidden)closeSongPopover();
   state.menuTrack=t;
   popoverAnchor=anchor;
   anchor.setAttribute('aria-expanded','true');
@@ -813,7 +814,10 @@ function setupEvents() {
   $('searchInput').addEventListener('input', event => {
     clearTimeout(searchTimer);
     const term = event.target.value;
-    if (!term.trim()) { state.query = ''; state.results = []; state.searching = false; navigate('search'); return; }
+    if(!term.trim()){
+      searchController?.abort();searchController=null;state.sequence++;
+      state.query='';state.results=[];state.searching=false;navigate('search');return;
+    }
     state.view = 'search';
     searchTimer = setTimeout(() => search(term), 390);
   });
