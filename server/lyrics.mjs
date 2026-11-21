@@ -1,145 +1,155 @@
-// Lightweight lyrics integrations for the Node runtime.
-export const LYRIC_SOURCES = Object.freeze([
-  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: 'when-enhanced-lrc-is-available', availability: 'best-effort' },
-  { id: 'lyricsovh', name: 'lyrics.ovh', synced: false, wordLevel: false, availability: 'best-effort' }
-]);
-const cache = new Map();
-function clean(s) { return String(s || '').trim(); }
-async function getJson(url, timeoutMs = 7500) {
-  const r = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'AurelisSymphony/2.0 (+https://github.com/TerserahGw/aurelis-symphony)' },
-    signal: AbortSignal.timeout(timeoutMs)
-  });
-  if (!r.ok) throw new Error('Lyrics service returned ' + r.status);
-  return r.json();
+// Seven-source lyric adapter. The full lirik.js was supplied by the project
+// owner and is vendored in server/vendor/lirik-sync.mjs.
+// Provider availability, per-word timing and licensing remain best-effort.
+import LirikSync, { SOURCES, parseLrc as parseEnhanced } from './vendor/lirik-sync.mjs';
+
+const ids=['lrclib','netease','qq','kugou','musixmatch','genius','lyricsovh'];
+const labels={lrclib:'LRCLIB',netease:'Netease Cloud Music',qq:'QQ Music',
+  kugou:'Kugou Music',musixmatch:'Musixmatch',genius:'Genius',lyricsovh:'lyrics.ovh'};
+export const LYRIC_SOURCES=Object.freeze(ids.map(id=>Object.freeze({
+  id,name:labels[id],synced:!!SOURCES[id]?.caps.synced,
+  wordLevel:!!SOURCES[id]?.caps.word,availability:'best-effort'
+})));
+const client=new LirikSync({
+  sources:ids,wordLevelFirst:true,timeoutMs:4900,cacheTtlMs:20*60_000,
+  userAgent:'AurelisSymphony/2.4 (+https://github.com/TerserahGw/aurelis-symphony)'
+});
+const cache=new Map(), pending=new Map(),TTL=15*60_000;
+function safe(s,max=150){return String(s||'').trim().slice(0,max);}
+function normal(s){return safe(s).normalize('NFKD').toLowerCase()
+  .replace(/[\u0300-\u036f]/g,'').replace(/[^\p{L}\p{N}\s]/gu,' ')
+  .replace(/\s+/g,' ').trim();}
+function related(expected,actual){
+  const a=normal(expected),b=normal(actual);
+  if(!a||!b)return 0;
+  if(a===b)return 1;
+  const aa=new Set(a.split(' ')),bb=new Set(b.split(' '));
+  let count=0;for(const v of aa)if(bb.has(v))count++;
+  return (2*count)/(aa.size+bb.size);
 }
-function seconds(token) {
-  const parts = token.split(':');
-  if (parts.length !== 2) return null;
-  const time = Number(parts[0]) * 60 + Number(parts[1]);
-  return Number.isFinite(time) ? time : null;
-}
-// Enhanced LRC uses <mm:ss.xx>word markers after an ordinary [line timestamp].
-// Keep word boundaries exact; never synthesize word timestamps when absent.
-export function parseLrc(value) {
-  const lines=[];
-  for(const raw of clean(value).split(/\r?\n/)) {
-    const lineTags=[...raw.matchAll(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g)];
-    if(!lineTags.length)continue;
-    const body=raw.replace(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g,'');
-    const markers=[...body.matchAll(/<(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)>/g)];
-    const text=body.replace(/<\d{1,3}:\d{2}(?:[.,]\d{1,3})?>/g,'').trim();
-    if(!text)continue;
-    for(const tag of lineTags){
-      const time=seconds(tag[1].replace(',','.'));
-      if(time===null)continue;
-      const words=[];
-      if(markers.length) {
-        const prefix=body.slice(0,markers[0].index);
-        if(prefix.trim())words.push({start:time,end:null,text:prefix});
-        for(let i=0;i<markers.length;i++){
-          const marker=markers[i], next=markers[i+1];
-          const start=seconds(marker[1].replace(',','.'));
-          if(start===null)continue;
-          const piece=body.slice(marker.index+marker[0].length,next?.index??body.length);
-          if(!piece)continue;
-          const nextStart=next?seconds(next[1].replace(',','.')):null;
-          words.push({start:Math.max(time,start),end:nextStart!==null?nextStart:null,text:piece});
-        }
-      }
-      lines.push({time,endTime:null,text,translation:'',words});
-    }
+function wordTimes(words,lineStart,lineEnd){
+  if(!Array.isArray(words))return [];
+  const result=[];
+  for(const w of words.slice(0,160)){
+    const start=Number(w.start),end=Number(w.end);
+    if(typeof w.text!=='string'||!w.text.trim() || !Number.isFinite(start) ||
+       !Number.isFinite(end)||end<=start||start<0||
+       (lineStart!==null && start<lineStart-.25) ||
+       (lineEnd!==null && start>lineEnd+.5))continue;
+    result.push({text:w.text.slice(0,140),start,end});
   }
-  lines.sort((a,b)=>a.time-b.time);
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i];line.endTime=lines[i+1]?.time??null;
-    for(let j=0;j<line.words.length;j++){
-      const word=line.words[j];
-      const next=line.words[j+1];
-      word.end=Math.max(word.start,Number(next?.start??line.endTime??(word.start+.45)));
-      // Avoid karaoke gradient filling earlier than the word begins.
-      if(!Number.isFinite(word.end))word.end=word.start+.45;
-    }
+  return result;
+}
+export function normalizeLyrics(result,expected={}){
+  if(!result||!Array.isArray(result.lines)||!result.lines.length)return null;
+  const source=String(result.source||'');
+  if(!ids.includes(source))return null;
+  const t=result.track||{};
+  const expectedTitle=safe(expected.title),expectedArtist=safe(expected.artist);
+  const titleMatch=expectedTitle?related(expectedTitle,t.title):1;
+  const artistMatch=expectedArtist&&t.artist?related(expectedArtist,t.artist):.65;
+  // Do not display lyrics from a different track merely because a title
+  // contains a common word. Unknown artist is permitted only with strong title.
+  if(titleMatch<.62 || (expectedArtist && artistMatch<.35))return null;
+  const duration=Number(expected.duration)||0, foundDuration=Number(t.duration)||0;
+  if(duration>0&&foundDuration>0&&Math.abs(duration-foundDuration)>Math.max(16,duration*.13))return null;
+  const lines=result.lines.slice(0,350).map(l=>{
+    const rawTime=l.time;
+    const time=rawTime===null||rawTime===undefined?null:Number(rawTime);
+    const rawEnd=l.endTime;
+    const endTime=rawEnd===null||rawEnd===undefined?null:Number(rawEnd);
+    const text=safe(l.text,900);
+    const words=wordTimes(l.words,Number.isFinite(time)?time:null,Number.isFinite(endTime)?endTime:null);
+    return {
+      time:Number.isFinite(time)?time:null,
+      endTime:Number.isFinite(endTime)?endTime:null,
+      text,translation:safe(l.translation,900),words
+    };
+  }).filter(l=>l.text);
+  if(!lines.length)return null;
+  const synced=lines.some(l=>l.time!==null);
+  const wordLevel=lines.some(l=>l.words.length>0);
+  return {source,sourceLabel:labels[source],track:{
+    title:safe(t.title)||expectedTitle,artist:safe(t.artist)||expectedArtist,
+    album:safe(t.album),duration:foundDuration||duration
+  },synced,wordLevel,instrumental:!!result.instrumental,lines};
+}
+export function parseLrc(value){return parseEnhanced(String(value||'')).lines.map(l=>({
+  time:l.time,endTime:l.endTime,text:l.text,translation:l.translation||'',words:l.words||[]
+})).filter(l=>l.text);}
+function rank(result){
+  if(!result)return -1;
+  const words=result.lines.reduce((n,l)=>n+(l.words?.length||0),0);
+  const synced=result.lines.filter(l=>l.time!==null).length;
+  // Prefer genuine word markers above line-level; LRCLIB over others on ties.
+  return (words>=2?1000:0)+(synced?120:0)+Math.min(25,words)+
+    (result.source==='lrclib'?5:0)+(result.source==='netease'?3:0);
+}
+function requestKey(track,artist,duration,source){
+  return JSON.stringify([normal(track),normal(artist),Math.round(Number(duration)||0),source]);
+}
+async function providerResult(id,query){
+  const provider=client.provider(id);
+  if(!provider)return {result:null,attempt:{source:id,ok:false,note:'unknown source'}};
+  try{
+    const v=await provider.find(query,{maxCandidates:2});
+    const result=normalizeLyrics(v,query);
+    return {result,attempt:{source:id,ok:!!result,wordLevel:!!result?.wordLevel,
+      ...(v&&!result?{note:'metadata mismatch'}:{})}};
+  }catch(e){
+    return {result:null,attempt:{source:id,ok:false,note:String(e?.message||e).slice(0,95)}};
   }
-  return lines;
 }
-function score(expected, actual) {
-  const norm = s => clean(s).toLowerCase().replace(/[()[\]{}.,!?-]/g, ' ').replace(/\s+/g, ' ').trim();
-  const a = norm(expected), b = norm(actual);
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return .7;
-  const aa = new Set(a.split(' ')), bb = new Set(b.split(' '));
-  return [...aa].filter(w => bb.has(w)).length / Math.max(aa.size, bb.size);
+async function fetchResults(track,artist,duration,source){
+  const query={track,artist,duration};
+  const selected=source?[source]:ids;
+  // Stage 1: timed providers run concurrently. Their requests are bounded by
+  // per-provider timeouts (no app-specific cookies or credentials).
+  const timed=selected.filter(id=>SOURCES[id]?.caps?.synced);
+  const plain=selected.filter(id=>!SOURCES[id]?.caps?.synced);
+  const results=await Promise.all(timed.map(id=>providerResult(id,query)));
+  let best=results.map(x=>x.result).filter(Boolean).sort((a,b)=>rank(b)-rank(a))[0]||null;
+  const attempts=results.map(x=>x.attempt);
+  // Only query HTML/plain sources when no timed provider matched.
+  if(!best){
+    const fallbacks=await Promise.all(plain.map(id=>providerResult(id,query)));
+    attempts.push(...fallbacks.map(x=>x.attempt));
+    best=fallbacks.map(x=>x.result).filter(Boolean).sort((a,b)=>rank(b)-rank(a))[0]||null;
+  }
+  return {result:best,attempts};
 }
-function standard(source, title, artist, album, duration, lines, instrumental = false) {
-  return {
-    source, track: { title, artist, album: album || '', duration: Number(duration) || 0 },
-    synced: lines.some(l => l.time !== null), wordLevel: lines.some(l => l.words?.length),
-    instrumental, lines
+export async function findLyrics(title,artist,duration=0,source=''){
+  title=safe(title);artist=safe(artist);duration=Math.max(0,Math.min(2000,Number(duration)||0));
+  if(!title)return {result:null,attempts:[]};
+  if(source&&!ids.includes(source))return {result:null,attempts:[{source,ok:false,note:'unknown source'}]};
+  const key=requestKey(title,artist,duration,source);
+  const c=cache.get(key);if(c&&c.expires>Date.now())return c.payload;
+  if(pending.has(key))return pending.get(key);
+  const p=fetchResults(title,artist,duration,source).then(payload=>{
+    if(cache.size>160)cache.delete(cache.keys().next().value);
+    cache.set(key,{payload,expires:Date.now()+(payload.result?TTL:45000)});
+    return payload;
+  }).finally(()=>pending.delete(key));
+  pending.set(key,p);
+  return p;
+}
+export async function allLyrics(title,artist,duration=0){
+  const entries=await Promise.all(ids.map(async id=>{
+    const payload=await findLyrics(title,artist,duration,id);
+    return [id,payload.result];
+  }));
+  return Object.fromEntries(entries);
+}
+export function lyricsToLrc(result){
+  if(!result?.lines?.length)return '';
+  const stamp=sec=>{
+    const n=Math.max(0,Number(sec)||0),min=String(Math.floor(n/60)).padStart(2,'0');
+    return min+':'+(n%60).toFixed(2).padStart(5,'0');
   };
-}
-async function fromLrclib(title, artist, duration) {
-  const query = new URLSearchParams({ track_name: title });
-  if (artist) query.set('artist_name', artist);
-  const list = await getJson('https://lrclib.net/api/search?' + query);
-  if (!Array.isArray(list) || !list.length) return null;
-  const matched = list.map(row => {
-    let rank = score(title, row.trackName) * .72 + (artist ? score(artist, row.artistName) * .28 : .28);
-    if (duration > 0 && row.duration) rank -= Math.min(.16, Math.abs(row.duration - duration) / duration * .2);
-    return { row, rank };
-  }).sort((a, b) => b.rank - a.rank)[0];
-  if (!matched || matched.rank < .49) return null;
-  const row = matched.row;
-  const detail = row.id ? await getJson('https://lrclib.net/api/get/' + encodeURIComponent(String(row.id))) : row;
-  let lines = detail.syncedLyrics ? parseLrc(detail.syncedLyrics) : [];
-  if (!lines.length && detail.plainLyrics) {
-    lines = detail.plainLyrics.split(/\r?\n/).map(text => clean(text)).filter(Boolean)
-      .map(text => ({ time: null, endTime: null, text, translation: '', words: [] }));
-  }
-  if (!lines.length && !detail.instrumental) return null;
-  return standard('lrclib', detail.trackName || title, detail.artistName || artist,
-    detail.albumName || '', detail.duration || duration, lines, !!detail.instrumental);
-}
-async function fromLyricsOvh(title, artist) {
-  if (!artist) return null;
-  const data = await getJson('https://api.lyrics.ovh/v1/' + encodeURIComponent(artist) + '/' + encodeURIComponent(title));
-  if (!data?.lyrics) return null;
-  const lines = data.lyrics.split(/\r?\n/).map(clean).filter(Boolean)
-    .map(text => ({ time: null, endTime: null, text, translation: '', words: [] }));
-  return standard('lyricsovh', title, artist, '', 0, lines);
-}
-async function provider(source, title, artist, duration) {
-  if (source === 'lrclib') return fromLrclib(title, artist, duration);
-  if (source === 'lyricsovh') return fromLyricsOvh(title, artist);
-  return null;
-}
-export async function findLyrics(title, artist, duration = 0, source = '') {
-  const key = JSON.stringify([title.toLowerCase(), artist.toLowerCase(), duration, source]);
-  const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.payload;
-  const attempts = [];
-  let result = null;
-  for (const id of (source ? [source] : ['lrclib', 'lyricsovh'])) {
-    try {
-      const value = await provider(id, title, artist, duration);
-      attempts.push({ source: id, ok: !!value, wordLevel: !!value?.wordLevel });
-      if (value) { result = value; break; }
-    } catch (e) { attempts.push({ source: id, ok: false, note: String(e.message).slice(0, 110) }); }
-  }
-  const payload = { result, attempts };
-  if (cache.size > 200) cache.delete(cache.keys().next().value);
-  cache.set(key, { payload, expires: Date.now() + (result ? 20 * 60_000 : 45_000) });
-  return payload;
-}
-export async function allLyrics(title, artist, duration = 0) {
-  const values = await Promise.all(LYRIC_SOURCES.map(async s => [s.id, (await findLyrics(title, artist, duration, s.id)).result]));
-  return Object.fromEntries(values);
-}
-export function lyricsToLrc(result) {
-  return result.lines.map(l => {
-    if (l.time === null) return l.text;
-    const mm = Math.floor(l.time / 60), ss = (l.time % 60).toFixed(2).padStart(5, '0');
-    return '[' + String(mm).padStart(2, '0') + ':' + ss + ']' + l.text;
-  }).join('\n') + '\n';
+  return result.lines.map(l=>{
+    if(l.time===null)return l.text;
+    const tag='['+stamp(l.time)+']';
+    if(l.words?.length) return tag+l.words.map(w=>'<'+stamp(w.start)+'>'+w.text).join('');
+    return tag+l.text;
+  }).join('\n')+'\n';
 }

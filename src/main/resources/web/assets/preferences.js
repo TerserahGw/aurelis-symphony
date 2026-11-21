@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const defaults={
-  lyricSize:31, lyricOffset:0, karaoke:true, lineGlow:true, reduceMotion:false,
+  lyricSize:31, lyricOffset:0, karaoke:true, reduceMotion:false,
   compactCards:false, artworkBlur:true, radioMode:'balanced',
   romanization:true, translation:false
 };
@@ -43,7 +43,7 @@ shell.innerHTML='<div class="asp-panel" role="dialog" aria-modal="true" aria-lab
   '<aside class="asp-sidebar"><h2>Pengaturan</h2><p>Aurelis Symphony</p>'+
   '<nav class="asp-nav" id="aspNavigation">'+sections.map(([id,icon,text])=>
     '<button type="button" data-tab="'+id+'">'+ico(icon)+esc(text)+'</button>').join('')+'</nav>'+
-  '<div class="asp-side-bottom">AURELIS / 2.3</div></aside>'+
+  '<div class="asp-side-bottom">AURELIS / 2.4</div></aside>'+
   '<div class="asp-main"><div class="asp-header"><div><div class="asp-kicker" id="aspKicker">PREFERENSI</div>'+
   '<h3 id="aspHeading">Pemutaran</h3><p id="aspSubtitle"></p></div>'+
   '<button type="button" class="asp-close" id="aspClose" aria-label="Tutup pengaturan">'+ico('x')+'</button></div>'+
@@ -133,10 +133,10 @@ function render(){
     html+=parts.heading('BACAAN');
     html+=parts.slide('lyricSize','Ukuran teks lirik','Atur teks lirik fullscreen untuk layar Android.',Number(values.lyricSize),20,46,1,' px');
     html+=parts.sw('karaoke','Progres per kata','Gunakan timestamp kata asli jika sumber menyediakannya.',values.karaoke);
-    html+=parts.sw('lineGlow','Progres baris','Tampilkan glow bertahap mengikuti waktu baris bila timestamp kata tidak ada.',values.lineGlow);
+
     html+=parts.sw('romanization','Romanisasi','Tampilkan bacaan romaji/kata Korea dalam huruf Latin.',values.romanization);
     html+=parts.sw('translation','Terjemahan Indonesia','Kirim baris lirik ke MyMemory hanya jika dinyalakan.',values.translation);
-    html+='<p class="asp-notice">Lirik Enhanced LRC mendukung timestamp per kata. Lirik biasa hanya punya timestamp per baris; progres baris merupakan perkiraan visual, bukan waktu asli tiap kata.</p>';
+    html+='<p class="asp-notice">Hanya lirik dengan waktu kata asli yang mendapatkan efek karaoke. LRC bertimestamp per baris tidak akan ditampilkan dengan progres palsu.</p>';
   }
   if(active==='visual'){
     html+=parts.heading('TAMPILAN');

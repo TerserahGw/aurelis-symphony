@@ -394,15 +394,7 @@ async function play(t) {
       if (state.drawer) renderPanel();
     }
   }
-  if ('mediaSession' in navigator) {
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: t.title || 'Untitled', artist: t.artist || 'Unknown', album: t.album || 'Aurelis Symphony',
-        artwork: validArt(t.artwork) ? [{ src: t.artwork }] : []
-      });
-      navigator.mediaSession.playbackState = 'playing';
-    } catch {}
-  }
+  // Android metadata and transport actions are synchronized by media-session.js.
 }
 async function recommend(t,seq) {
   const recent=state.history.slice(0,8).map(trackById).filter(Boolean).filter(x=>x.id!==t.id);
@@ -592,6 +584,12 @@ function showTrackMenu(t,anchor){
   if(!trackPopover.hidden&&popoverAnchor===anchor){closeSongPopover();return;}
   state.menuTrack=t;
   popoverAnchor=anchor;
+  if(validArt(t.artwork)){
+    const art=String(t.artwork).replace(/["'()\\\s]/g,x=>encodeURIComponent(x));
+    trackPopover.style.setProperty('--aurelis-ambient-art','url("'+art+'")');
+  }else{
+    trackPopover.style.removeProperty('--aurelis-ambient-art');
+  }
   const liked=state.favorite.has(t.id);
   const offset=Number(read('songLyricOffsets',{})[t.id]||0);
   const option=(action,label,icon)=>'<button role="menuitem" class="pop-btn" data-menu="'+action+
@@ -915,7 +913,8 @@ function snapshot() {
   };
 }
 window.Aurelis = Object.freeze({
-  snapshot, play, toggle, next, previous,
+  snapshot,play,toggle,next,previous,
+  openSongMenu(anchor){if(state.current)showTrackMenu(state.current,anchor);},
   seek(sec){ if (Number.isFinite(sec) && audio.seekable.length) audio.currentTime=Math.max(0,Math.min(sec,currentDuration())); },
   setVolume(value){ audio.volume=Math.max(0,Math.min(1,Number(value)||0)); $('volume').value=String(Math.round(audio.volume*100)); store('volume',audio.volume);emit('player'); },
   toggleLike(){like(state.current);},

@@ -1,45 +1,49 @@
-# ✦ Aurelis Symphony 2.3.1
+# ✦ Aurelis Symphony 2.4.0
 
-Music listening room with a responsive web player, YouTube music metadata, artist-and-vibe radio, karaoke lyric display and a first-party API reference.
+Responsive music player with a native HTML5 Audio element, YouTube-only search and recommendations, lyric sources, customizable fullscreen player and open REST API.
 
-## What's new in 2.3
+## What's new in 2.4
 
-- **Preferences:** desktop dialog / Android bottom-sheet style settings. The controls change actual playback, AutoPlay, repeat, shuffle, radio diversity, volume, lyric size and offset, translations, romanization, glow effects, compact cards, animation reduction, artwork background, and browser data management. Saved in browser storage.
-- **API reference:** `/docs/api` is a responsive developer documentation webpage with request examples, copy controls and safe interactive GET/POST demos. `/api/v1/openapi.json` remains available.
-- **Artist-and-vibe radio:** `/api/v1/recommendations` uses three YouTube searches, title/artist de-duplication across uploads and versions, prior song context, manual queue exclusions, and artist diversity. Modes: `familiar`, `balanced`, `discover`. This is rules-based metadata ranking, not audio embeddings or actual waveform similarity.
-- **Lyrics:** Enhanced LRC `<mm:ss.xx>` word markers are parsed when present. Real word timing drives karaoke glow; normal line-level LRC optionally shows **estimated line progress**, not fabricated per-word timing. Long lines wrap within the mobile viewport. Global lyric offset, plus per-track offset from the three-dot menu.
-- **Compact track popover:** anchored near the three-dot button instead of opening a large modal. Play, queue, like, playlists, source and per-song sync adjustment.
-- Fullscreen player and mini player remain one audio engine. Up Next is generated from the same source and avoids replaying the current title or recently played songs.
+- **Correct lyric behaviour:** no fabricated progress fill for line-timed LRC or plain lyrics. Only genuine word-level timestamps activate a smooth per-word karaoke fill; ordinary line timestamps highlight the active line and scroll.
+- **Seven lyric providers:** the user-supplied `lirik.js` has been integrated as `server/vendor/lirik-sync.mjs`. LRCLIB, Netease Cloud Music, QQ Music, Kugou Music, Musixmatch, Genius and lyrics.ovh are available as best-effort sources. The backend checks artist/title/duration and prefers real per-word data. This does not guarantee each provider is reachable or licensed for every track; some use unofficial endpoints and can stop working.
+- **Ambient glass:** the three-dot popover and settings sheet use subtle artwork-tinted translucent layers, frosted blur, and readable borders. Can be reduced with accessibility/transparency preferences.
+- **Android media notification:** dedicated Media Session synchronization for title, artist, artwork (YouTube thumbnails or Aurelis fallback), transport buttons, playback state and position/duration. Actual Android lockscreen/notification display is controlled by the browser and OS, and may differ from a native app.
+- Fullscreen player, playlists, synced LRC downloads, translations, romanization, radio queue and Spotify-style browsing remain available.
 
-## Playback restrictions
+## Streaming note
 
-**Online discovery is YouTube-only.** No Audius or YouTube iframe. The experimental direct-audio backend tries `youtubei.js` and then `@distube/ytdl-core` for the same video ID. Both can fail due to upstream restrictions and anti-bot challenges, even with successful search results. These unofficial streaming interfaces are not endorsed by YouTube, and extracting audio can violate YouTube's terms. No DRM or authentication bypass is included. Original demo MP3 tracks remain available.
+Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js` and `@distube/ytdl-core` for the exact video ID. This is not an official YouTube playback integration. YouTube may impose anti-bot restrictions. Audio and downloads cannot be guaranteed by passing CI. Original licensed Aurelis demo tracks are available.
 
-## Altare Global deployment
+## Docker image / Altare
 
-GitHub Actions publishes the following image after all checks pass:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.4.0` on port **8080**, preserving the current domain. Suggested variables:
 
-    ghcr.io/terserahgw/aurelis-symphony:2.3.0
+```env
+HOST=0.0.0.0
+PORT=8080
+SEARCH_BACKEND=youtubei
+AURELIS_DIRECT_AUDIO=true
+AURELIS_YTDL_FALLBACK=true
+AURELIS_STREAM_EVAL=false
+AURELIS_MAX_STREAMS=3
+AURELIS_CLOUD_LIBRARY=false
+NODE_OPTIONS=--max-old-space-size=256
+```
 
-Keep the same domain, default Docker command and port **8080**. Example environment:
+Requires Node.js 22.22.2+.
 
-    HOST=0.0.0.0
-    PORT=8080
-    SEARCH_BACKEND=youtubei
-    AURELIS_DIRECT_AUDIO=true
-    AURELIS_YTDL_FALLBACK=true
-    AURELIS_STREAM_EVAL=false
-    AURELIS_MAX_STREAMS=3
-    AURELIS_CLOUD_LIBRARY=false
-    NODE_OPTIONS=--max-old-space-size=256
+## Developer
 
-Requires Node.js 22.22.2 or later. Upgrading does not remove platform streaming restrictions.
+```sh
+npm install
+npm run check
+npm test
+npm start
+```
 
-## Development
+- `/api/v1/lyrics/sources` lists 7 providers and their timing capabilities.
+- `/api/v1/lyrics?track=...&artist=...&source=...` searches best matching lyrics or a specific provider.
+- `/api/v1/lyrics/all` collects all available sources.
+- `/docs/api` explains the REST API.
 
-    npm install
-    npm run check
-    npm test
-    npm start
-
-Explore `/docs/api` for search, radio, home, lyrics, translation and streaming endpoint details. Browser collection is local by default. This project is GPL-3.0-or-later; respect copyright and music licensing.
+The original `lirik.js` is provided by the project owner. Third-party provider names and lyrics remain owned by their respective owners. Respect source licensing and terms. GPL-3.0-or-later.
