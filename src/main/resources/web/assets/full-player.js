@@ -390,6 +390,7 @@ window.AurelisFullscreen={open,close};
 $('fpClose').addEventListener('click',close);
 $('fpHandle').addEventListener('click',close);
 $('fpLike').addEventListener('click',()=>app()?.toggleLike());
+$('fpMore').addEventListener('click',event=>app()?.openSongMenu?.(event.currentTarget));
 $('fpPlay').addEventListener('click',()=>app()?.toggle());
 $('fpNext').addEventListener('click',()=>app()?.next());
 $('fpPrev').addEventListener('click',()=>app()?.previous());
