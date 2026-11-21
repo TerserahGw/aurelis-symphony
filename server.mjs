@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { searchMusic, lookupYouTube, getSearchStatus } from './server/youtube.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
+import { translateLyrics } from './server/translation.mjs';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -87,14 +88,23 @@ async function api(req, res, url, head) {
   const duration = bounded(q.get('duration'), 0, 7200);
 
   if (endpoint === '/api/v1/health' || endpoint === '/health') {
-    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'experimental-direct-audio-and-licensed-audio', time: new Date().toISOString() }, head);
+    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'experimental-native-audio-and-licensed-audio', time: new Date().toISOString() }, head);
   }
   if (endpoint === '/api/v1/config') return response(res, 200, {
     name: 'Aurelis Symphony', version: APP_VERSION, cloudLibrary,
     searchProviders: ['youtube', 'catalog'], lyricsSources: LYRIC_SOURCES,
-    discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus()
+    discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus(), translation: {provider:'MyMemory',target:'id',optIn:true}
   }, head);
-  if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint);
+  if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint, q);
+  if (endpoint === '/api/v2/translate') {
+    if (req.method !== 'POST') return apiError(res,405,'method_not_allowed','Use POST.',head);
+    if (rateLimited(req)) return apiError(res,429,'rate_limited','Terlalu banyak permintaan terjemahan.',head);
+    let input;
+    try { input=await readJson(req,12_000); }
+    catch(e){ e.status=400; throw e; }
+    const output=await translateLyrics(input);
+    return response(res,output.ok ? 200 : (output.code ? 400 : 503),output,head);
+  }
   if (endpoint === '/api/v2/status') return response(res, 200, { ok: true, version: APP_VERSION, stream: directAudioStatus() }, head);
   if (endpoint === '/api/v2/home') {
     const seeds = ['late night chill music', 'indie pop songs', 'japanese city pop', 'top hits music'];
@@ -203,7 +213,7 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, 'http://localhost'); } catch { return apiError(res, 400, 'bad_url', 'Invalid URL.', head); }
   const isApi = url.pathname.startsWith('/api/') || url.pathname === '/health';
-  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT'))
+  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT') && !(url.pathname === '/api/v2/translate' && req.method === 'POST'))
     return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   if (!isApi && !['GET', 'HEAD'].includes(req.method)) return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   try {
