@@ -344,9 +344,12 @@ async function loadHome() {
   render();
   try {
     const recent=state.history.slice(0,6).map(trackById).filter(Boolean).map(t=>({id:t.id,title:t.title,artist:t.artist}));
+    const liked=[...state.favorite].slice(0,10).map(trackById).filter(Boolean).map(t=>(
+      {id:t.id,title:t.title,artist:t.artist,album:t.album||''}));
     const params=new URLSearchParams({
-      recent:JSON.stringify(recent),mode:window.AurelisPreferences?.values.radioMode||'balanced',
-      mood:currentGenre||'indie pop chill'
+      recent:JSON.stringify(recent),liked:JSON.stringify(liked),
+      mode:window.AurelisPreferences?.values.radioMode||'balanced',
+      mood:currentGenre||(!(recent.length||liked.length)?'indie pop chill':'')
     });
     const [catalogResult,homeResult]=await Promise.allSettled([
       api('/api/v1/catalog'),api('/api/v2/home?'+params)
@@ -444,7 +447,12 @@ async function recommend(t,seq) {
   const recent=state.history.slice(0,8).map(trackById).filter(Boolean).filter(x=>x.id!==t.id);
   const blocked=[t,...state.queue,...recent.slice(0,5)];
   const others=[...state.results,...state.home,...state.catalog];
-  state.suggestions=state.autoplay?uniqueRadio(others,blocked,6):[];
+  // Never fill Up Next with arbitrary unrelated search results. Wait for the
+  // radio engine; a same-artist fallback is better than a random genre jump.
+  const related=others.filter(x=>x && (
+    String(x.artist||'').toLowerCase()===String(t.artist||'').toLowerCase() ||
+    (t.provider!=='youtube' && x.provider!=='youtube')));
+  state.suggestions=state.autoplay?uniqueRadio(related,blocked,5):[];
   emit('queue');
   if (!state.autoplay)return;
   if (state.drawer==='queue')renderPanel();
@@ -453,7 +461,8 @@ async function recommend(t,seq) {
     const params=new URLSearchParams({
       track:t.title||'',artist:t.artist||'',album:t.album||'',
       exclude:t.id,limit:'25',mode:window.AurelisPreferences?.values.radioMode||'balanced',
-      mood:currentGenre||'',recent:JSON.stringify(recent.slice(0,8).map(x=>({id:x.id,title:x.title,artist:x.artist}))),
+      mood:currentGenre||'',recent:JSON.stringify(recent.slice(0,8).map(x=>({id:x.id,title:x.title,artist:x.artist,album:x.album||''}))),
+      liked:JSON.stringify([...state.favorite].slice(0,10).map(trackById).filter(Boolean).map(x=>({id:x.id,title:x.title,artist:x.artist,album:x.album||''}))),
       queued:JSON.stringify(state.queue.slice(0,10).map(x=>({id:x.id,title:x.title,artist:x.artist})))
     });
     const result=await api('/api/v1/recommendations?'+params);
