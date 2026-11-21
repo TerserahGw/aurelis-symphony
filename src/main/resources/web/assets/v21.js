@@ -43,10 +43,10 @@ const state = {
   view: 'home', activePlaylist: null, query: '',
   catalog: [], home: [], results: [], favorite: new Set(read('favorites', [])),
   history: read('history', []), playlists: read('playlists', []),
-  queue: read('queue', []), suggestions: [], cache: read('trackCache', {}),
-  current: null, shuffle: read('shuffle', false), repeat: read('repeat', false),
+  queue: read('queue', []), suggestions: [], autoplay: read('autoplay', true), cache: read('trackCache', {}),
+  current: null, shuffle: read('shuffle', false), repeat: Number(read('repeat', 0)) || 0,
   drawer: '', lyrics: null, lyricsSource: '', lyricsIndex: -1, loading: false,
-  searching: false, sequence: 0, lyricSequence: 0, panelError: '',
+  searching: false, sequence: 0, playSequence: 0, lyricSequence: 0, panelError: '',
   menuTrack: null, initial: true
 };
 const TRACK_LIMIT = 240;
@@ -83,6 +83,7 @@ function save() {
   store('trackCache', state.cache);
   store('shuffle', state.shuffle);
   store('repeat', state.repeat);
+  store('autoplay', state.autoplay);
 }
 function trackById(id) {
   if (state.cache[id]) return state.cache[id];
@@ -283,6 +284,7 @@ function currentTime() { return Number(audio.currentTime) || 0; }
 function currentDuration() {
   return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Number(state.current?.duration) || 0;
 }
+function emit(name) { window.dispatchEvent(new CustomEvent('aurelis:' + name)); }
 function setPlayer() {
   const t = state.current;
   $('playerTitle').textContent = t?.title || 'Belum ada lagu';
@@ -294,6 +296,7 @@ function setPlayer() {
   $('shuffleButton').classList.toggle('active', state.shuffle);
   $('repeatButton').classList.toggle('active', state.repeat > 0);
   updateTime();
+  emit('player');
 }
 function updateTime() {
   const duration = currentDuration();
@@ -304,11 +307,12 @@ function updateTime() {
   $('seek').style.setProperty('--pct', percent + '%');
   $('mobileProgress').style.width = percent + '%';
   syncLyrics();
+  emit('time');
 }
 async function play(t) {
   if (!t) return;
   if (!t.id) return;
-  const seq = ++state.sequence;
+  const seq = ++state.playSequence;
   state.current = t;
   remember(t);
   state.history = [t.id, ...state.history.filter(id => id !== t.id)].slice(0, 70);
@@ -316,6 +320,7 @@ async function play(t) {
   state.lyricsIndex = -1;
   state.panelError = '';
   save();
+  emit('track');
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
@@ -330,7 +335,7 @@ async function play(t) {
   try {
     await audio.play();
   } catch (e) {
-    if (seq === state.sequence) {
+    if (seq === state.playSequence) {
       state.panelError = 'Pemutaran langsung tidak tersedia untuk lagu ini.';
       toast('Tidak dapat memutar sumber audio. Coba lagu lain.', true);
       if (state.drawer) renderPanel();
@@ -349,23 +354,26 @@ async function play(t) {
 async function recommend(t, seq) {
   const others = uniq([...state.results, ...state.home, ...state.catalog])
     .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id));
-  state.suggestions = others.slice(0, 3);
+  state.suggestions = state.autoplay ? others.slice(0, 6) : [];
+  emit('queue');
+  if (!state.autoplay) return;
   if (state.drawer === 'queue') renderPanel();
   if (t.provider !== 'youtube' && !t.videoId && !String(t.id).startsWith('yt-')) return;
   try {
     const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', exclude: t.id, limit: '15' });
     const result = await api('/api/v1/recommendations?' + params);
-    if (seq !== state.sequence || state.current?.id !== t.id) return;
+    if (seq !== state.playSequence || state.current?.id !== t.id) return;
     state.suggestions = uniq(result.tracks || [])
-      .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id)).slice(0, 3);
+      .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id)).slice(0, 8);
     state.suggestions.forEach(remember);
     save();
+    emit('queue');
     if (state.drawer === 'queue') renderPanel();
   } catch {}
 }
 function next() {
   const queued = state.queue.shift();
-  const suggested = !queued && state.suggestions.shift();
+  const suggested = !queued && state.autoplay && state.suggestions.shift();
   const selected = queued || suggested;
   if (!selected) {
     if (state.repeat) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -373,6 +381,7 @@ function next() {
     return;
   }
   save();
+  emit('queue');
   play(selected);
 }
 function previous() {
@@ -393,6 +402,7 @@ function like(t) {
   remember(t);
   save();
   setPlayer();
+  emit('favorites');
   render();
   toast(state.favorite.has(t.id) ? 'Ditambahkan ke lagu disukai' : 'Dihapus dari lagu disukai');
 }
@@ -402,6 +412,7 @@ function addQueue(t, first = false) {
   if (first) state.queue.unshift(t); else state.queue.push(t);
   save();
   if (state.drawer === 'queue') renderPanel();
+  emit('queue');
   toast(first ? 'Akan diputar selanjutnya' : 'Ditambahkan ke antrean');
 }
 function openPanel(type) {
@@ -465,6 +476,7 @@ async function loadLyrics(t) {
   if (Array.isArray(t.lyrics) && t.lyrics.length) {
     state.lyrics = { source:'Aurelis Originals', synced:true, lines:t.lyrics };
     if (state.drawer === 'lyrics') renderPanel();
+    emit('lyrics');
     return;
   }
   try {
@@ -475,10 +487,12 @@ async function loadLyrics(t) {
     if (token !== state.lyricSequence || state.current?.id !== t.id) return;
     state.lyrics = data.result || { source:'unavailable', synced:false, lines:[] };
     if (state.drawer === 'lyrics') renderPanel();
+    emit('lyrics');
   } catch {
     if (token === state.lyricSequence) {
       state.lyrics = { source:'unavailable', synced:false, lines:[] };
       if (state.drawer === 'lyrics') renderPanel();
+      emit('lyrics');
     }
   }
 }
@@ -586,6 +600,7 @@ function handleClick(event) {
     if (btn.dataset.kind === 'manual') state.queue.splice(index, 1);
     else state.suggestions.splice(index, 1);
     save(); renderPanel();
+    emit('queue');
   }
   else if (type === 'lyric-seek' && btn.dataset.time !== '') {
     const time = Number(btn.dataset.time);
@@ -633,9 +648,9 @@ function setupEvents() {
   });
   $('queueButton').addEventListener('click', () => openPanel('queue'));
   $('lyricsButton').addEventListener('click', () => openPanel('lyrics'));
-  $('expandButton').addEventListener('click', () => openPanel('now'));
-  $('playerArt').addEventListener('click', () => openPanel('now'));
-  $('playerTitle').addEventListener('click', () => openPanel('now'));
+  $('expandButton').addEventListener('click', () => window.AurelisFullscreen?.open());
+  $('playerTrack').addEventListener('click', event => { if (!event.target.closest('#playerLike')) window.AurelisFullscreen?.open(); });
+  $('playerTitle').addEventListener('click', () => window.AurelisFullscreen?.open());
   $('closePanel').addEventListener('click', closePanel);
   $('scrim').addEventListener('click', closePanel);
   all('[data-panel]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.panel)));
@@ -661,11 +676,25 @@ function setupEvents() {
   audio.addEventListener('ended', () => {
     if (state.repeat === 2) { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
   });
-  audio.addEventListener('error', () => {
-    if (!state.current) return;
-    state.panelError = 'Stream gagal / format tidak didukung / upstream membatasi akses. Coba lagu lain.';
-    toast('Tidak bisa memutar ' + state.current.title + '. Sumber audio membatasi akses.', true);
-    if (state.drawer === 'now') renderPanel();
+  audio.addEventListener('error', async () => {
+    if (!state.current || !audio.src) return;
+    const t = state.current;
+    const id = t.videoId || (String(t.id).startsWith('yt-') ? String(t.id).slice(3) : '');
+    state.panelError = 'Sumber audio gagal dimuat.';
+    if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+      try {
+        const result = await fetch('/api/v2/audio/' + id + '?probe=1');
+        const detail = await result.json();
+        if (state.current?.id === t.id && !detail.ok) {
+          state.panelError = detail.message || detail.code || state.panelError;
+        }
+      } catch {}
+    }
+    if (state.current?.id === t.id) {
+      toast(state.panelError, true);
+      emit('error');
+      if (state.drawer === 'now') renderPanel();
+    }
   });
   document.addEventListener('keydown', e => {
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
@@ -684,6 +713,49 @@ function setupEvents() {
     }
   }
 }
+
+function snapshot() {
+  return {
+    current:state.current, paused:audio.paused, time:currentTime(),
+    duration:currentDuration(), queue:state.queue.slice(),
+    suggestions:state.suggestions.slice(), autoplay:state.autoplay,
+    shuffle:state.shuffle, repeat:state.repeat, favorites:[...state.favorite],
+    lyrics:state.lyrics, lyricIndex:state.lyricsIndex, error:state.panelError,
+    volume:audio.volume
+  };
+}
+window.Aurelis = Object.freeze({
+  snapshot, play, toggle, next, previous,
+  seek(sec){ if (Number.isFinite(sec) && audio.seekable.length) audio.currentTime=Math.max(0,Math.min(sec,currentDuration())); },
+  setVolume(value){ audio.volume=Math.max(0,Math.min(1,Number(value)||0)); $('volume').value=String(Math.round(audio.volume*100)); store('volume',audio.volume);emit('player'); },
+  toggleLike(){like(state.current);},
+  toggleAutoplay(){
+    state.autoplay=!state.autoplay;
+    if(!state.autoplay) state.suggestions=[];
+    save();emit('queue');
+    if(state.autoplay && state.current) recommend(state.current,state.playSequence);
+    return state.autoplay;
+  },
+  toggleShuffle(){ $('shuffleButton').click();emit('queue'); },
+  toggleRepeat(){ $('repeatButton').click();emit('queue'); },
+  playItem(kind,index){
+    const list=kind==='manual' ? state.queue : state.suggestions;
+    const t=list[Number(index)];
+    if(!t)return;
+    list.splice(Number(index),1);save();emit('queue');play(t);
+  },
+  removeItem(kind,index){
+    const list=kind==='manual' ? state.queue : state.suggestions;
+    if (!list || !Number.isInteger(Number(index))) return;
+    list.splice(Number(index),1);save();emit('queue');
+  },
+  moveQueue(index,direction){
+    index=Number(index);const next=index+Number(direction);
+    if(index<0||index>=state.queue.length||next<0||next>=state.queue.length)return;
+    [state.queue[index],state.queue[next]]=[state.queue[next],state.queue[index]];
+    save();emit('queue');
+  }
+});
 async function boot() {
   setupEvents();
   setPlayer();
