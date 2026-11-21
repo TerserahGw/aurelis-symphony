@@ -55,6 +55,19 @@ jobs:
             const changed=await page.locator('#fpAutoSwitch').getAttribute('aria-checked');
             if(old===changed)throw new Error('Autoplay did not toggle');
             await page.locator('#fpLyricsTab').click();
+            if(!(await page.locator('#fpRomanize').textContent()).includes('あ'))throw new Error('New romanization icon missing');
+            const initialShuffle=await page.evaluate(()=>window.Aurelis.snapshot().shuffle);
+            await page.locator('#fpShuffle').click();
+            const shuffle=await page.evaluate(()=>window.Aurelis.snapshot().shuffle);
+            if(shuffle===initialShuffle)throw new Error('Shuffle toggle did not update runtime state');
+            const initialRepeat=await page.evaluate(()=>window.Aurelis.snapshot().repeat);
+            await page.locator('#fpRepeat').click();
+            const repeatOne=await page.evaluate(()=>window.Aurelis.snapshot().repeat);
+            if(repeatOne!==(initialRepeat+1)%3)throw new Error('Repeat mode did not cycle');
+            await page.locator('#fpRepeat').click();
+            const repeatTwo=await page.evaluate(()=>window.Aurelis.snapshot().repeat);
+            if(repeatTwo!==(repeatOne+1)%3)throw new Error('Repeat mode did not reach next state');
+            await page.locator('#fpRepeat').click();
             await page.locator('#fpRomanize').click();
             await page.locator('#fpTranslate').click();
             await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'.png'});
@@ -76,6 +89,20 @@ jobs:
             if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))throw new Error('Song offset failed');
             await page.locator('#trackPopover [data-menu=offset-reset]').click();
             await page.locator('#trackPopover [data-menu=play]').click();
+            const demoMenu=page.locator('.card-more[data-id="demo-aether"]').first();
+            if(!await demoMenu.count())throw new Error('Aurelis Original demo menu missing');
+            await demoMenu.click({timeout:10000});
+            if(!await page.locator('#trackPopover [data-menu=download-audio]').isVisible())throw new Error('Download audio missing');
+            if(!await page.locator('#trackPopover [data-menu=download-lyrics]').isVisible())throw new Error('Download lyrics missing');
+            const audioDownloadEvent=page.waitForEvent('download',{timeout:10000});
+            await page.locator('#trackPopover [data-menu=download-audio]').click();
+            const audioDownload=await audioDownloadEvent;
+            if(!audioDownload.suggestedFilename().endsWith('.mp3'))throw new Error('Demo audio is not MP3');
+            await demoMenu.click({timeout:10000});
+            const lyricDownloadEvent=page.waitForEvent('download',{timeout:10000});
+            await page.locator('#trackPopover [data-menu=download-lyrics]').click();
+            const lyricDownload=await lyricDownloadEvent;
+            if(!lyricDownload.suggestedFilename().endsWith('.lrc'))throw new Error('Synced lyric did not download as LRC');
             await page.goto('http://127.0.0.1:18080/docs/api',{waitUntil:'domcontentloaded'});
             await page.locator('.docs-endpoint').first().waitFor();
             await page.locator('[data-try=health]').scrollIntoViewIfNeeded();
@@ -101,6 +128,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aurelis-2-3-interface-screenshots
+          name: aurelis-2-3-1-player-screenshots
           path: /tmp/aurelis-*.png
           if-no-files-found: ignore
