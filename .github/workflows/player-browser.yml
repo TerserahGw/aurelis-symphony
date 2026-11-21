@@ -63,7 +63,7 @@ jobs:
             await page.locator('#settingsButton').click();
             await page.locator('#aurelisPreferences').waitFor({state:'visible',timeout:5000});
             await page.locator('[data-tab=lyrics]').click();
-            await page.locator('[data-range=lyricOffset]').fill('0.5');
+            await page.locator('[data-range=lyricOffset]').evaluate(el=>{el.value='0.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
             if(!(await page.locator('[data-output=lyricOffset]').textContent()).includes('0.5'))throw new Error('Lyric offset setting did not apply');
             await page.locator('[data-tab=data]').click();
             if(!await page.locator('[data-action=docs]').isVisible())throw new Error('Docs button missing');
