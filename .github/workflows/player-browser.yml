@@ -74,6 +74,8 @@ jobs:
             await page.locator('#trackPopover [data-menu=offset-plus]').click();
             if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))
               throw new Error('Fullscreen lyric offset button unresponsive');
+            // Restore the original offset so later baseline popover tests start at zero.
+            await page.locator('#trackPopover [data-menu=offset-reset]').click();
             await page.locator('#fpMore').click();
             await page.locator('#trackPopover').waitFor({state:'hidden',timeout:3000});
             await page.locator('#fpMore').click();
