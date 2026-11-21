@@ -89,3 +89,6 @@
 /* Ensure the action button sits above the artwork click surface. */
 .music-card>.card-more{z-index:4}
 .music-card .card-play{z-index:3}
+
+/* Keep anchored actions within short Android landscape viewports. */
+.song-popover{max-height:calc(100dvh - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
