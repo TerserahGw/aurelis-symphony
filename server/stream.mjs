@@ -11,7 +11,7 @@ const FORMAT_TTL = 90_000;
 const formatCache = new Map();
 const MAX_STREAMS = Math.min(12, Math.max(1, Number(process.env.AURELIS_MAX_STREAMS) || 4));
 const STREAM_ENABLED = process.env.AURELIS_DIRECT_AUDIO !== 'false';
-const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL !== 'false';
+const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL === 'true';
 let active = 0;
 let clientPromise;
 const stats = { ok:0, failed:0, lastError:null, lastAt:null };
