@@ -13,6 +13,12 @@ on:
       - src/main/resources/web/assets/glass-v25.css
       - src/main/resources/web/assets/island-v26.css
       - src/main/resources/web/assets/island-v26.js
+      - src/main/resources/web/assets/motion-v27.css
+      - src/main/resources/web/assets/motion-v27.js
+      - src/main/resources/web/assets/docs-v27.css
+      - src/main/resources/web/assets/docs-v27.js
+      - server/romanize.mjs
+      - src/main/resources/web/docs/api.html
       - server/recommend.mjs
       - src/main/resources/web/assets/media-session.js
       - server/lyrics.mjs

@@ -44,9 +44,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/terserahgw/aurelis-symphony:latest,ghcr.io/terserahgw/aurelis-symphony:2.6.0
+          tags: ghcr.io/terserahgw/aurelis-symphony:latest,ghcr.io/terserahgw/aurelis-symphony:2.7.0
           labels: |
             org.opencontainers.image.source=https://github.com/TerserahGw/aurelis-symphony
-            org.opencontainers.image.description=Aurelis Symphony 2.6.0 native audio player
+            org.opencontainers.image.description=Aurelis Symphony 2.7.0 native audio player
           cache-from: type=gha
           cache-to: type=gha,mode=max

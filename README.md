@@ -1,4 +1,13 @@
-# ✦ Aurelis Symphony 2.6.0
+# ✦ Aurelis Symphony 2.7.0
+
+## New in v2.7.0
+
+- **Dictionary-enhanced romanization** through `POST /api/v2/romanize`: Japanese kanji readings (lazy Kuromoji + WanaKana), Korean Revised Romanization and Mandarin Pinyin. Lyric player batches requests, caches results by song and allows language override (auto / ja / ko / zh). Unknown Kanji readings are preserved instead of inventing readings.
+- **Motion overhaul:** smoother capsule FLIP morph, navigation transitions, popover/settings exit ghosts, active lyric transitions and GPU-bounded scroll reveals. Per-letter gradient progression is applied only when real per-word timestamps are available; plain line-timed lyrics remain plain highlights.
+- **Developer Hub:** revamped `/docs/api` with an interactive stream resolver/probe/preview tool, editable per-endpoint requests and better mobile layout.
+- **Audio URL resolver:** `GET /api/v2/playback/:id` returns `streamUrl` for original demos or experimental YouTube tracks; for YouTube, call `probeUrl` before putting `streamUrl` in HTML5 audio. The existing `GET /api/v2/audio/:videoId` streams binary audio with Range when upstream permits, or HTTP 424 on upstream failures. No DRM/captcha/cookie bypass.
+- **Playback caveat:** `probe=1` verifies only initial bytes; it does not guarantee a complete track or stable availability. API metadata is separate from playable audio.
+
 
 Responsive music player with a native HTML5 Audio element, YouTube-only search and recommendations, lyric sources, customizable fullscreen player and open REST API.
 
@@ -24,7 +33,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.6.0` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.0` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0
