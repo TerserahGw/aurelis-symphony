@@ -85,3 +85,7 @@
  .asp-control select{max-width:120px}
 }
 @media(prefers-reduced-motion:reduce){.asp-overlay,.asp-panel,.song-popover{animation:none}}
+
+/* Ensure the action button sits above the artwork click surface. */
+.music-card>.card-more{z-index:4}
+.music-card .card-play{z-index:3}
