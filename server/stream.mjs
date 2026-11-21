@@ -58,7 +58,11 @@ async function resolve(id) {
 async function fetchRemote(url, opts) {
   for (let i = 0; i < 3; i++) {
     if (!remoteIsAllowed(url)) throw requestError('blocked_upstream', 'Unexpected upstream host.');
-    const result = await fetch(url, { ...opts, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    let result;
+    try { result = await fetch(url, { ...opts, redirect: 'manual', signal: controller.signal }); }
+    finally { clearTimeout(timer); }
     if ([301,302,303,307,308].includes(result.status)) {
       const next = result.headers.get('location');
       if (!next) throw requestError('unexpected_redirect', 'Upstream redirected without a destination.');

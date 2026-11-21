@@ -17,9 +17,9 @@ test('LRC timestamps', () => {
   assert.equal(lines[0].endTime, 2.1);
   assert.match(lyricsToLrc({ lines }), /\[00:01.50\]Hello/);
 });
-test('HTTP smoke test: health, demos, official playback info, byte ranges', async () => {
+test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', async () => {
   const port = 19000 + Math.floor(Math.random() * 3000);
-  const proc = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, HOST: '127.0.0.1', PORT: String(port), AURELIS_CLOUD_LIBRARY: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, HOST: '127.0.0.1', PORT: String(port), AURELIS_CLOUD_LIBRARY: 'false', AURELIS_DIRECT_AUDIO: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
   const base = 'http://127.0.0.1:' + port;
   try {
     let up = false;
@@ -29,10 +29,13 @@ test('HTTP smoke test: health, demos, official playback info, byte ranges', asyn
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(up, true, 'server starts');
-    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.0.0');
+    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.1.0');
+    assert.match(await (await fetch(base + '/')).text(), /assets\/v21\.js/);
+    assert.equal((await fetch(base + '/api/v2/audio/MwpMEbgC7DA')).status, 403);
+    assert.equal((await (await fetch(base + '/api/v2/status')).json()).stream.enabled, false);
     assert.equal((await (await fetch(base + '/api/v1/catalog')).json()).tracks.length, 3);
     const info = await (await fetch(base + '/api/v1/info?url=' + encodeURIComponent('https://youtube.com/watch?v=MwpMEbgC7DA'))).json();
-    assert.equal(info.track.playback.mode, 'official-embed');
+    assert.equal(info.track.playback.mode, 'experimental-direct-audio');
     assert.deepEqual(info.track.audio, []);
     const range = await fetch(base + '/demo/aether-bloom.mp3', { headers: { Range: 'bytes=0-99' } });
     assert.equal(range.status, 206);
