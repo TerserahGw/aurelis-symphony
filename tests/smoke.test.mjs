@@ -6,7 +6,17 @@ import { parseLrc, lyricsToLrc } from '../server/lyrics.mjs';
 import { validSingleRange, allowedMediaHost } from '../server/stream.mjs';
 import { detectLyricLanguage, translateLyrics } from '../server/translation.mjs';
 import { parseByteRange } from '../server/ytdl-fallback.mjs';
+import { safeFilename, contentDisposition } from '../server/download.mjs';
 
+test('download filenames are safe and correct for MP4 and WebM audio', () => {
+  assert.equal(safeFilename('Tom Odell - Another Love'),'Tom Odell - Another Love');
+  assert.equal(safeFilename('bad\\r\\nContent-Type: text/html'),'bad r nContent-Type text html');
+  assert.equal(contentDisposition('Aurelis Demo','MwpMEbgC7DA','audio/mp4'),
+    'attachment; filename="Aurelis Demo.m4a"');
+  assert.equal(contentDisposition('Demo','MwpMEbgC7DA','audio/webm'),
+    'attachment; filename="Demo.webm"');
+  assert.doesNotMatch(contentDisposition('\r\nX-Test: injected','abc', 'audio/mp4'),/\\r|\\n/);
+});
 test('YouTube URL whitelist', () => {
   assert.equal(lookupYouTube('https://youtube.com/watch?v=MwpMEbgC7DA')?.videoId, 'MwpMEbgC7DA');
   assert.equal(lookupYouTube('https://youtu.be/MwpMEbgC7DA')?.videoId, 'MwpMEbgC7DA');
@@ -82,6 +92,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     });
     assert.equal(invalidTranslation.status,400);
     assert.equal((await fetch(base + '/api/v2/audio/MwpMEbgC7DA')).status, 403);
+    assert.equal((await fetch(base + '/api/v2/audio/MwpMEbgC7DA?download=1')).status,403);
     assert.equal((await fetch(base + '/api/v1/search?provider=audius&q=test')).status, 400);
     assert.equal((await (await fetch(base + '/api/v2/status')).json()).stream.enabled, false);
     assert.equal((await (await fetch(base + '/api/v1/catalog')).json()).tracks.length, 3);
