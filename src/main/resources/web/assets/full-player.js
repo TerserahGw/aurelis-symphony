@@ -93,7 +93,7 @@ let translations=new Map(),translationBusy=false,lastFocus=-2,lastSeek=false;
 let timerToast,touchY=0,touchX=0,lastTranslateIndex=-1;
 let frame=0,lastFrame=0,lastKaraokeIndex=-999;
 let lastKaraokeEnabled=true,lastLineGlowEnabled=true;
-const prefs=()=>window.AurelisPreferences?.values || {karaoke:true,lineGlow:true,lyricSize:31,romanization:romanEnabled,translation:translationEnabled};
+const prefs=()=>window.AurelisPreferences?.values || {karaoke:true,lyricSize:31,romanization:romanEnabled,translation:translationEnabled};
 const lyricClock=s=>(Number(s.time)||0)+(window.AurelisPreferences?.getOffset(s.current)||0);
 function flash(text) {
   $('fpToast').textContent=text;
@@ -172,7 +172,7 @@ function paintKaraoke(s,index){
     lastKaraokeIndex=index;
     for(let i=0;i<nodes.length;i++){
       const fill=i<index?'100%':'0%';
-      for(const span of nodes[i].querySelectorAll('[data-word-start],.fp-line-progress')){
+      for(const span of nodes[i].querySelectorAll('[data-word-start]')){
         span.style.setProperty('--fill',fill);
         span.classList.remove('singing');
         span.classList.toggle('sung',i<index);
@@ -193,12 +193,7 @@ function paintKaraoke(s,index){
       span.classList.toggle('sung',fill>=99.5);
     }
   }
-  const lineElement=node.querySelector('.fp-line-progress');
-  if(lineElement){
-    const start=Number(line.time)||0,end=Math.max(start+.25,Number(line.endTime)||start+3);
-    const fill=settings.lineGlow===false?0:time<=start?0:time>=end?100:Math.min(100,(time-start)/(end-start)*100);
-    lineElement.style.setProperty('--fill',fill.toFixed(1)+'%');
-  }
+
 }
 function animateWords(now){
   if(!opened)return;
@@ -301,8 +296,6 @@ function renderLyrics(force=false) {
       if(options.karaoke!==false&&Array.isArray(line.words)&&line.words.length){
         text='<span class="fp-line-words">'+line.words.map(w=>'<span class="fp-word" data-word-start="'+
           Number(w.start||0)+'" data-word-end="'+Number(w.end||w.start+.45)+'">'+esc(w.text||'')+'</span>').join('')+'</span>';
-      }else if(l.synced&&options.lineGlow!==false&&typeof line.time==='number'){
-        text='<span class="fp-line-progress">'+esc(line.text)+'</span>';
       }else{
         text='<span class="fp-line-plain">'+esc(line.text)+'</span>';
       }
