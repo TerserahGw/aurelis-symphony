@@ -204,8 +204,12 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     if (response.status===206 && cr) out['Content-Range']=cr;
     if (cl && /^\d+$/.test(cl)) out['Content-Length']=cl;
     if(download)out['Content-Disposition']=contentDisposition(downloadTitle,id,mime);
-    if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(response.status,out); return res.end(); }
-    res.writeHead(response.status,out);
+    // A full download requested without Range must be a 200 response, not a
+    // misleading 206 partial response from the upstream bytes=0- request.
+    const clientStatus=download&&!req.headers.range?200:response.status;
+    if(clientStatus===200)delete out['Content-Range'];
+    if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(clientStatus,out); return res.end(); }
+    res.writeHead(clientStatus,out);
     started = true;
     let bytes = 0;
     let chunk = first.value;
