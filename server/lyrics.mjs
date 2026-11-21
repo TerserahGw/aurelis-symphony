@@ -1,8 +1,7 @@
-// Lightweight lyrics integrations for the Node runtime.
-export const LYRIC_SOURCES = Object.freeze([
-  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: 'when-enhanced-lrc-is-available', availability: 'best-effort' },
-  { id: 'lyricsovh', name: 'lyrics.ovh', synced: false, wordLevel: false, availability: 'best-effort' }
-]);
+// Aurelis v2.4: seven sources powered by the user-provided LirikSync module.
+// Existing LRCLIB/lyrics.ovh routes remain as fallback when the adapter fails.
+import { providerCapabilities,queryMultiLyrics,allMultiLyrics } from './lyrics-multi.mjs';
+export const LYRIC_SOURCES=Object.freeze(providerCapabilities());
 const cache = new Map();
 function clean(s) { return String(s || '').trim(); }
 async function getJson(url, timeoutMs = 7500) {
@@ -114,27 +113,36 @@ async function provider(source, title, artist, duration) {
   if (source === 'lyricsovh') return fromLyricsOvh(title, artist);
   return null;
 }
-export async function findLyrics(title, artist, duration = 0, source = '') {
-  const key = JSON.stringify([title.toLowerCase(), artist.toLowerCase(), duration, source]);
-  const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.payload;
-  const attempts = [];
-  let result = null;
-  for (const id of (source ? [source] : ['lrclib', 'lyricsovh'])) {
-    try {
-      const value = await provider(id, title, artist, duration);
-      attempts.push({ source: id, ok: !!value, wordLevel: !!value?.wordLevel });
-      if (value) { result = value; break; }
-    } catch (e) { attempts.push({ source: id, ok: false, note: String(e.message).slice(0, 110) }); }
+export async function findLyrics(title,artist,duration=0,source='') {
+  const key=JSON.stringify([title.toLowerCase(),artist.toLowerCase(),duration,source]);
+  const hit=cache.get(key);
+  if(hit&&hit.expires>Date.now())return hit.payload;
+  const multi=await queryMultiLyrics(title,artist,duration,source);
+  let result=multi.result;
+  const attempts=multi.attempts;
+  // Keep the historically stable two sources as a graceful fallback. Do not
+  // replace existing word-level lyrics with a weaker line-level result.
+  if(!result&&(!source||source==='lrclib'||source==='lyricsovh')){
+    for(const id of (source?[source]:['lrclib','lyricsovh'])){
+      try{
+        const value=await provider(id,title,artist,duration);
+        attempts.push({source:id+'-fallback',ok:!!value,wordLevel:!!value?.wordLevel});
+        if(value){result=value;break;}
+      }catch(e){attempts.push({source:id+'-fallback',ok:false,note:String(e.message).slice(0,90)});}
+    }
   }
-  const payload = { result, attempts };
-  if (cache.size > 200) cache.delete(cache.keys().next().value);
-  cache.set(key, { payload, expires: Date.now() + (result ? 20 * 60_000 : 45_000) });
+  const payload={result,attempts};
+  if(cache.size>200)cache.delete(cache.keys().next().value);
+  cache.set(key,{payload,expires:Date.now()+(result?20*60_000:45_000)});
   return payload;
 }
-export async function allLyrics(title, artist, duration = 0) {
-  const values = await Promise.all(LYRIC_SOURCES.map(async s => [s.id, (await findLyrics(title, artist, duration, s.id)).result]));
-  return Object.fromEntries(values);
+export async function allLyrics(title,artist,duration=0) {
+  const results=await allMultiLyrics(title,artist,duration);
+  for(const id of ['lrclib','lyricsovh']){
+    if(results[id])continue;
+    try{results[id]=await provider(id,title,artist,duration);}catch{results[id]=null;}
+  }
+  return results;
 }
 export function lyricsToLrc(result) {
   return result.lines.map(l => {
