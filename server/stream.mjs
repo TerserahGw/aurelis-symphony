@@ -5,6 +5,7 @@
 import { once } from 'node:events';
 import { Script } from 'node:vm';
 import { Innertube, Platform } from 'youtubei.js';
+import { fallbackAudio } from './ytdl-fallback.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 const FORMAT_TTL = 90_000;
@@ -14,7 +15,8 @@ const STREAM_ENABLED = process.env.AURELIS_DIRECT_AUDIO !== 'false';
 const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL === 'true';
 let active = 0;
 let clientPromise;
-const stats = { ok:0, failed:0, lastError:null, lastAt:null };
+const ALTERNATE_ENABLED = process.env.AURELIS_YTDL_FALLBACK !== 'false';
+const stats = { ok:0, failed:0, lastError:null, lastAt:null, lastEngine:null, alternativeSuccess:0 };
 
 if (DECIPHER_ENABLED) {
   // YouTube.js requires a JS interpreter for signature deciphering. Execute
@@ -135,12 +137,14 @@ export function directAudioStatus() {
     active, maxConcurrent:MAX_STREAMS,
     evaluatorEnabled:DECIPHER_ENABLED,
     evaluator:'node-vm-limited',
+    engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled'},
+    lastEngine:stats.lastEngine, alternativeSuccess:stats.alternativeSuccess,
     probe:'GET /api/v2/audio/:id?probe=1',
     successfulResponses:stats.ok,
     failedResponses:stats.failed,
     lastError:stats.lastError,
     lastErrorAt:stats.lastAt,
-    notice:'Format dari YouTube.js tidak selalu tersedia. Tanpa embed, cookies, atau bypass DRM.'
+    notice:'YouTube.js + @distube/ytdl-core menggunakan video yang sama. Pemutaran tetap dapat gagal karena pembatasan jaringan atau YouTube.'
   };
 }
 export async function relayAudio(req, res, pathname, searchParams = new URLSearchParams()) {
@@ -182,7 +186,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
     if (probe) {
       await reader.cancel().catch(()=>{});
-      stats.ok++;
+      stats.ok++; stats.lastEngine='youtubei.js';
       return json(res,200,{ok:true,mode:'experimental-native-audio',mime,rangeSupported:response.status===206,
         firstBytes:first.value.byteLength,codecAvailability:'unverified'});
     }
@@ -214,17 +218,38 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
       if (out['Content-Length'] && bytes!==Number(out['Content-Length'])) {
         throw makeError('truncated_upstream','Transfer audio terhenti sebelum seluruh byte terkirim.');
       }
-      stats.ok++;
+      stats.ok++;stats.lastEngine='youtubei.js';
       res.end();
     }
-  } catch (e) {
+  } catch (primaryError) {
+    let e=primaryError;
+    // Fall back only before any HTTP header or bytes were emitted. Both engines
+    // use the exact YouTube video ID chosen by the user (no replacement song).
+    if (ALTERNATE_ENABLED && !res.headersSent && !disposed && !abort.signal.aborted) {
+      try {
+        const alternate=await fallbackAudio({id,req,res,range,probe,signal:abort.signal});
+        stats.ok++;
+        stats.alternativeSuccess++;
+        stats.lastEngine='@distube/ytdl-core';
+        if (probe && !res.headersSent) {
+          return json(res,200,{...alternate,fallbackFrom:primaryError.code||'youtubei_failed'});
+        }
+        return;
+      } catch (fallbackError) {
+        e=fallbackError;
+        console.warn('[aurelis-audio] youtubei.js and fallback failed',id,
+          primaryError.code||'primary_unavailable', fallbackError.code||'fallback_unavailable');
+      }
+    }
     stats.failed++;
     stats.lastError=e.code || 'audio_error';
     stats.lastAt=new Date().toISOString();
     console.warn('[aurelis-audio]',id,stats.lastError,redact(e),e.detail || '');
     if (!res.headersSent) json(res,424,{ok:false,code:stats.lastError,
-      message:e?.message?.startsWith('Sumber') || e?.message?.startsWith('YouTube')
-        ? e.message : 'Streaming audio dari sumber saat ini tidak tersedia.',
+      message:e?.message?.startsWith('Sumber') || e?.message?.startsWith('YouTube') || e?.message?.startsWith('Alternatif')
+        || e?.message?.startsWith('Engine') || e?.message?.startsWith('Modul')
+        ? e.message : 'Streaming audio YouTube belum tersedia pada jaringan ini.',
+      enginesTried:ALTERNATE_ENABLED?['youtubei.js','@distube/ytdl-core']:['youtubei.js'],
       retryable:true});
     else { if (!res.destroyed) res.destroy(); }
   } finally {

@@ -40,10 +40,10 @@ const read = (key, def) => { try { return JSON.parse(localStorage.getItem('aurel
 const store = (key, val) => { try { localStorage.setItem('aurelis:' + key, JSON.stringify(val)); } catch {} };
 const audio = $('audio');
 const state = {
-  view: 'home', activePlaylist: null, query: '', source: read('sourceChoice','audius'),
+  view: 'home', activePlaylist: null, query: '',
   catalog: [], home: [], results: [], favorite: new Set(read('favorites', [])),
   history: read('history', []), playlists: read('playlists', []),
-  queue: read('queue', []), suggestions: [], autoplay: read('autoplay', true), cache: read('trackCache', {}),
+  queue: read('queue', []).filter(t => t?.provider !== 'audius'), suggestions: [], autoplay: read('autoplay', true), cache: read('trackCache', {}),
   current: null, shuffle: read('shuffle', false), repeat: Number(read('repeat', 0)) || 0,
   drawer: '', lyrics: null, lyricsSource: '', lyricsIndex: -1, loading: false,
   searching: false, sequence: 0, playSequence: 0, lyricSequence: 0, panelError: '',
@@ -86,6 +86,7 @@ function save() {
   store('autoplay', state.autoplay);
 }
 function trackById(id) {
+  if (String(id).startsWith('au-') || state.cache[id]?.provider === 'audius') return null;
   if (state.cache[id]) return state.cache[id];
   return [...state.catalog, ...state.home, ...state.results, ...state.queue, ...state.suggestions]
     .find(t => t?.id === id) || null;
@@ -156,12 +157,6 @@ function rows(tracks, options = {}) {
   if (!list.length) return empty('Belum ada lagu', 'Mulai dengan mencari musik atau menambahkan lagu.');
   return '<div class="track-list">' + list.map((t, i) => row(t, i, options)).join('') + '</div>';
 }
-function sourceChoices() {
-  return '<div class="chip-row" style="padding:4px 0 14px"><button class="chip '+(state.source==='audius'?'active':'')+
-    '" data-action="source" data-source="audius">◉ Audius · Streaming langsung</button>'+
-    '<button class="chip '+(state.source==='youtube'?'active':'')+
-    '" data-action="source" data-source="youtube">▶ YouTube.js · Eksperimen</button></div>';
-}
 function chips() {
   return '<div class="chip-row">' + genres.map(([label, term]) =>
     '<button class="chip ' + (currentGenre === term ? 'active' : '') + '" data-action="genre" data-term="' + esc(term) +
@@ -176,22 +171,22 @@ function hero() {
 function homeView() {
   const featured = uniq(state.home.length ? state.home : state.catalog);
   const recentTracks = uniq(state.history.map(trackById).filter(Boolean));
-  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.2</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
+  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.2.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
     '<p class="subheading">Temukan lagu, buat playlist, dan dengarkan dengan pemutar audio Aurelis.</p>' +
-    hero() + sourceChoices() + chips() +
+    hero() + chips() +
     section('Pilihan untukmu', state.loading ? skeleton() : cards(featured, 12), 'DENGARKAN SEKARANG',
       '<button class="see-all" data-action="explore">Jelajahi ' + ic('arrow-right') + '</button>') +
     (recentTracks.length ? section('Terakhir kamu dengar', cards(recentTracks, 8), 'RECENTLY PLAYED') : '') +
     section('Aurelis Originals', cards(state.catalog, 8), 'ORIGINAL DEMO AUDIO') +
-    '<p class="note">Audius menyediakan katalog audio langsung resmi. Hasil YouTube.js memakai eksperimen yang mungkin gagal; kedua sumber memiliki katalog berbeda.</p>';
+    '<p class="note">Semua hasil dari YouTube. Audio dicoba lewat YouTube.js lalu @distube/ytdl-core tanpa mengganti lagunya.</p>';
 }
 function searchView() {
   const title = state.query ? 'Hasil pencarian' : 'Jelajahi musik';
   const subtitle = state.query ? 'Menampilkan musik untuk “' + esc(state.query) + '”' : 'Coba genre favoritmu atau ketik judul lagu di atas.';
   return '<div class="heading-page"><div class="eyebrow">EXPLORE THE SOUND</div><h1>' + title +
-    '</h1><p>' + subtitle + '</p></div>' + sourceChoices() + chips() +
+    '</h1><p>' + subtitle + '</p></div>' + chips() +
     (state.searching ? skeleton(8) : state.results.length
-      ? section('Musik ditemukan', rows(state.results), state.source==='audius'?'AUDIO LANGSUNG · AUDIUS':'YOUTUBE.JS · EKSPERIMEN')
+      ? section('Musik ditemukan', rows(state.results), 'HASIL YOUTUBE MUSIC')
       : state.query ? empty('Belum ada hasil', 'Coba kata kunci lain atau ganti sumber musik.', 'search')
         : section('Mulai dari sini', cards(state.home.length ? state.home : state.catalog, 12), 'REKOMENDASI'));
 }
@@ -251,7 +246,7 @@ async function search(term) {
   state.view = 'search';
   render();
   try {
-    const data = await api('/api/v1/search?provider=' + state.source + '&q=' + encodeURIComponent(term) + '&limit=30');
+    const data = await api('/api/v1/search?provider=youtube&q=' + encodeURIComponent(term) + '&limit=30');
     if (seq !== state.sequence) return;
     state.results = uniq(data.tracks || []);
     state.results.forEach(remember);
@@ -269,7 +264,7 @@ async function loadHome() {
   render();
   try {
     const [catalogResult, homeResult] = await Promise.allSettled([
-      api('/api/v1/catalog'), api('/api/v2/home?source=' + state.source)
+      api('/api/v1/catalog'), api('/api/v2/home')
     ]);
     if (catalogResult.status === 'fulfilled') state.catalog = catalogResult.value.tracks || [];
     if (homeResult.status === 'fulfilled') state.home = homeResult.value.tracks || [];
@@ -282,10 +277,6 @@ async function loadHome() {
   }
 }
 function audioUrl(t) {
-  if (t?.provider === 'audius' && typeof t.audio === 'string' &&
-      /^https:\/\/api\.audius\.co\/v1\/tracks\/[A-Za-z0-9_-]{2,60}\/stream\?app_name=AurelisSymphony$/.test(t.audio)) {
-    return t.audio;
-  }
   if (t?.audio && typeof t.audio === 'string' && t.audio.startsWith('/')) return t.audio;
   const id = t?.videoId || (String(t?.id || '').startsWith('yt-') ? String(t.id).slice(3) : '');
   return /^[a-zA-Z0-9_-]{11}$/.test(id) ? '/api/v2/audio/' + id : '';
@@ -368,9 +359,9 @@ async function recommend(t, seq) {
   emit('queue');
   if (!state.autoplay) return;
   if (state.drawer === 'queue') renderPanel();
-  if (!['youtube','audius'].includes(t.provider) && !t.videoId && !String(t.id).startsWith('yt-')) return;
+  if (t.provider !== 'youtube' && !t.videoId && !String(t.id).startsWith('yt-')) return;
   try {
-    const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', provider: t.provider === 'audius' ? 'audius' : 'youtube', exclude: t.id, limit: '15' });
+    const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', provider: 'youtube', exclude: t.id, limit: '15' });
     const result = await api('/api/v1/recommendations?' + params);
     if (seq !== state.playSequence || state.current?.id !== t.id) return;
     state.suggestions = uniq(result.tracks || [])
@@ -595,17 +586,6 @@ function handleClick(event) {
   if (type === 'play') play(t);
   else if (type === 'like') like(t);
   else if (type === 'menu') showTrackMenu(t);
-  else if (type === 'source') {
-    if (!['audius','youtube'].includes(btn.dataset.source) || btn.dataset.source===state.source) return;
-    state.source=btn.dataset.source;
-    store('sourceChoice',state.source);
-    state.results=[];
-    toast(state.source==='audius'?'Audius: streaming audio langsung':'YouTube.js: streaming masih eksperimen');
-    if (state.view==='search') {
-      if (state.query) search(state.query);
-      else render();
-    } else loadHome();
-  }
   else if (type === 'genre') openGenre(btn.dataset.term);
   else if (type === 'explore') { navigate('search'); $('searchInput').focus(); }
   else if (type === 'new-playlist') newPlaylist();
