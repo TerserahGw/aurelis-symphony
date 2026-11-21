@@ -56,7 +56,7 @@ jobs:
                 with urllib.request.urlopen(req,timeout=18) as r:
                   print('Audius media',r.status,'mime',r.headers.get('Content-Type'),'bytes',len(r.read(1024)))
             except Exception as exc:
-              print('Audius host error',type(exc).__name__,str(exc)[:150])
+              print('Audius host error',type(exc).__name__,str(exc)[:150], getattr(exc,'read',lambda: b'')()[:300])
           PY
           kill $(cat /tmp/aurelis.pid) || true
           exit 0
