@@ -1,16 +1,16 @@
 {
   "name": "aurelis-symphony",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
-  "description": "Music listening room with vibe radio, karaoke lyrics, preferences and API docs",
+  "description": "Seven-source lyric sync, genuine word-only karaoke, ambient frosted glass player",
   "engines": {
     "node": ">=22.22.2"
   },
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check server.mjs && node --check server/youtube.mjs && node --check server/lyrics.mjs && node --check server/translation.mjs && node --check server/ytdl-fallback.mjs && node --check server/stream.mjs && node --check src/main/resources/web/assets/v21.js && node --check src/main/resources/web/assets/full-player.js && node --check server/recommend.mjs && node --check src/main/resources/web/assets/preferences.js && node --check src/main/resources/web/assets/docs.js && node --check server/download.mjs"
+    "check": "node --check server.mjs && node --check server/youtube.mjs && node --check server/lyrics.mjs && node --check server/translation.mjs && node --check server/ytdl-fallback.mjs && node --check server/stream.mjs && node --check src/main/resources/web/assets/v21.js && node --check src/main/resources/web/assets/full-player.js && node --check server/recommend.mjs && node --check src/main/resources/web/assets/preferences.js && node --check src/main/resources/web/assets/docs.js && node --check server/download.mjs && node --check server/lirik-sync.mjs && node --check server/lyrics-multi.mjs"
   },
   "dependencies": {
     "youtubei.js": "18.3.0",

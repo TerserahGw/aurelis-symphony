@@ -1,4 +1,4 @@
-# ✦ Aurelis Symphony 2.3.1
+# ✦ Aurelis Symphony 2.4.0
 
 Music listening room with a responsive web player, YouTube music metadata, artist-and-vibe radio, karaoke lyric display and a first-party API reference.
 

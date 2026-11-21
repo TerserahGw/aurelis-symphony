@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.3.1",
+    "version": "2.4.0",
     "description": "Aurelis Symphony 2.3: YouTube-only metadata, artist-and-vibe radio, Enhanced LRC word timing, opt-in translation, unofficial experimental audio playback."
   },
   "servers": [
@@ -226,7 +226,7 @@
     },
     "/api/v1/lyrics/sources": {
       "get": {
-        "summary": "Available lyrics providers",
+        "summary": "List seven supported lyric sources and their capabilities",
         "parameters": [],
         "responses": {
           "200": {
@@ -240,7 +240,7 @@
     },
     "/api/v1/lyrics": {
       "get": {
-        "summary": "Best matching lyrics",
+        "summary": "7-source lyrics with strict word timing when available",
         "parameters": [
           {
             "name": "track",

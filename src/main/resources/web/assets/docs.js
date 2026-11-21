@@ -4,7 +4,7 @@
   const base=location.origin;
   const endpointGroups=[
     {label:'Sistem',items:[
-      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.3.1","runtime":"node"}'},
+      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.4.0","runtime":"node"}'},
       {id:'config',method:'GET',path:'/api/v1/config',description:'Backend, sumber pencarian, ketersediaan lirik, serta kemampuan pemutar.',params:[],sample:'/api/v1/config',code:'{"name":"Aurelis Symphony","searchProviders":["youtube","catalog"],"player":"HTML5 Audio (no embed)"}'},
       {id:'status',method:'GET',path:'/api/v2/status',description:'Status eksperimen audio: engine, jumlah koneksi aktif, kode kegagalan terakhir.',params:[],sample:'/api/v2/status',code:'{"ok":true,"stream":{"engines":{"primary":"youtubei.js","fallback":"@distube/ytdl-core"}}}'}
     ]},
@@ -16,10 +16,10 @@
       {id:'info',method:'GET',path:'/api/v1/info',description:'Normalisasi URL video YouTube menjadi metadata ID dan informasi pemutaran eksperimental.',params:[['url','URL HTTPS YouTube yang dikenali.']],sample:'/api/v1/info?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DMwpMEbgC7DA',code:'{"track":{"id":"yt-MwpMEbgC7DA","videoId":"MwpMEbgC7DA"}}'}
     ]},
     {label:'Lirik dan terjemahan',items:[
-      {id:'lyrics',method:'GET',path:'/api/v1/lyrics',description:'Cari lirik dengan timestamp baris; Enhanced LRC berisi timestamp kata jika tersedia.',params:[['track','Judul lagu (wajib).'],['artist','Nama artis.'],['duration','Durasi dalam detik untuk mencocokkan sumber.'],['source','lrclib / lyricsovh (opsional).']],sample:'/api/v1/lyrics?track=Another%20Love&artist=Tom%20Odell',code:'{"result":{"source":"lrclib","synced":true,"wordLevel":false,"lines":[{"time":1.2,"text":"…","words":[]}]}}'},
+      {id:'lyrics',method:'GET',path:'/api/v1/lyrics',description:'Pencarian tujuh sumber lirik: LRCLIB, NetEase, QQ, Kugou, Musixmatch, Genius dan lyrics.ovh. Karaoke hanya jika ada timestamp per kata.',params:[['track','Judul lagu (wajib).'],['artist','Nama artis.'],['duration','Durasi dalam detik untuk mencocokkan sumber.'],['source','lrclib / lyricsovh (opsional).']],sample:'/api/v1/lyrics?track=Another%20Love&artist=Tom%20Odell',code:'{"result":{"source":"lrclib","synced":true,"wordLevel":false,"lines":[{"time":1.2,"text":"…","words":[]}]}}'},
       {id:'lyricall',method:'GET',path:'/api/v1/lyrics/all',description:'Ambil hasil semua sumber lirik yang tersedia.',params:[['track','Judul lagu (wajib).'],['artist','Nama artis.']],sample:'/api/v1/lyrics/all?track=Another%20Love&artist=Tom%20Odell',code:'{"results":{"lrclib":{"lines":[…]},"lyricsovh":null}}'},
       {id:'lyriclrc',method:'GET',path:'/api/v1/lyrics/lrc',description:'Ekspor lirik sinkron sebagai teks .lrc jika ditemukan.',params:[['track','Judul lagu (wajib).'],['artist','Nama artis.']],sample:'/api/v1/lyrics/lrc?track=Another%20Love&artist=Tom%20Odell',code:'[00:01.20]Contoh baris lirik'},
-      {id:'sources',method:'GET',path:'/api/v1/lyrics/sources',description:'Daftar provider lirik dan dukungan sinkronisasi.',params:[],sample:'/api/v1/lyrics/sources',code:'{"sources":[{"id":"lrclib","synced":true},{"id":"lyricsovh","synced":false}]}'},
+      {id:'sources',method:'GET',path:'/api/v1/lyrics/sources',description:'Daftar tujuh provider lirik dan dukungan sinkronisasi (per-kata tergantung judul).',params:[],sample:'/api/v1/lyrics/sources',code:'{"sources":[{"id":"lrclib","synced":true},{"id":"lyricsovh","synced":false}]}'},
       {id:'translate',method:'POST',path:'/api/v2/translate',description:'Terjemahkan 1–16 baris ke bahasa Indonesia melalui MyMemory. Kirim hanya teks yang kamu punya hak untuk proses. Dapat terkena kuota.',params:[['texts','Array berisi 1–16 string; maksimal 250 karakter per baris.'],['target','id atau en.']],sample:'/api/v2/translate',body:{texts:['Hello world'],target:'id'},code:'{"ok":true,"provider":"MyMemory","translations":["Halo dunia"]}'}
     ]},
     {label:'Pemutaran dan data',items:[
