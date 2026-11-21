@@ -40,13 +40,13 @@ const read = (key, def) => { try { return JSON.parse(localStorage.getItem('aurel
 const store = (key, val) => { try { localStorage.setItem('aurelis:' + key, JSON.stringify(val)); } catch {} };
 const audio = $('audio');
 const state = {
-  view: 'home', activePlaylist: null, query: '',
+  view: 'home', activePlaylist: null, query: '', source: read('sourceChoice','audius'),
   catalog: [], home: [], results: [], favorite: new Set(read('favorites', [])),
   history: read('history', []), playlists: read('playlists', []),
-  queue: read('queue', []), suggestions: [], cache: read('trackCache', {}),
-  current: null, shuffle: read('shuffle', false), repeat: read('repeat', false),
+  queue: read('queue', []), suggestions: [], autoplay: read('autoplay', true), cache: read('trackCache', {}),
+  current: null, shuffle: read('shuffle', false), repeat: Number(read('repeat', 0)) || 0,
   drawer: '', lyrics: null, lyricsSource: '', lyricsIndex: -1, loading: false,
-  searching: false, sequence: 0, lyricSequence: 0, panelError: '',
+  searching: false, sequence: 0, playSequence: 0, lyricSequence: 0, panelError: '',
   menuTrack: null, initial: true
 };
 const TRACK_LIMIT = 240;
@@ -83,6 +83,7 @@ function save() {
   store('trackCache', state.cache);
   store('shuffle', state.shuffle);
   store('repeat', state.repeat);
+  store('autoplay', state.autoplay);
 }
 function trackById(id) {
   if (state.cache[id]) return state.cache[id];
@@ -155,6 +156,12 @@ function rows(tracks, options = {}) {
   if (!list.length) return empty('Belum ada lagu', 'Mulai dengan mencari musik atau menambahkan lagu.');
   return '<div class="track-list">' + list.map((t, i) => row(t, i, options)).join('') + '</div>';
 }
+function sourceChoices() {
+  return '<div class="chip-row" style="padding:4px 0 14px"><button class="chip '+(state.source==='audius'?'active':'')+
+    '" data-action="source" data-source="audius">◉ Audius · Streaming langsung</button>'+
+    '<button class="chip '+(state.source==='youtube'?'active':'')+
+    '" data-action="source" data-source="youtube">▶ YouTube.js · Eksperimen</button></div>';
+}
 function chips() {
   return '<div class="chip-row">' + genres.map(([label, term]) =>
     '<button class="chip ' + (currentGenre === term ? 'active' : '') + '" data-action="genre" data-term="' + esc(term) +
@@ -169,23 +176,23 @@ function hero() {
 function homeView() {
   const featured = uniq(state.home.length ? state.home : state.catalog);
   const recentTracks = uniq(state.history.map(trackById).filter(Boolean));
-  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
+  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.2</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
     '<p class="subheading">Temukan lagu, buat playlist, dan dengarkan dengan pemutar audio Aurelis.</p>' +
-    hero() + chips() +
+    hero() + sourceChoices() + chips() +
     section('Pilihan untukmu', state.loading ? skeleton() : cards(featured, 12), 'DENGARKAN SEKARANG',
       '<button class="see-all" data-action="explore">Jelajahi ' + ic('arrow-right') + '</button>') +
     (recentTracks.length ? section('Terakhir kamu dengar', cards(recentTracks, 8), 'RECENTLY PLAYED') : '') +
     section('Aurelis Originals', cards(state.catalog, 8), 'ORIGINAL DEMO AUDIO') +
-    '<p class="note">Lagu YouTube menggunakan relay audio eksperimental melalui YouTube.js, bukan embed. Tidak semua hasil pencarian pasti dapat diputar.</p>';
+    '<p class="note">Audius menyediakan katalog audio langsung resmi. Hasil YouTube.js memakai eksperimen yang mungkin gagal; kedua sumber memiliki katalog berbeda.</p>';
 }
 function searchView() {
   const title = state.query ? 'Hasil pencarian' : 'Jelajahi musik';
   const subtitle = state.query ? 'Menampilkan musik untuk “' + esc(state.query) + '”' : 'Coba genre favoritmu atau ketik judul lagu di atas.';
   return '<div class="heading-page"><div class="eyebrow">EXPLORE THE SOUND</div><h1>' + title +
-    '</h1><p>' + subtitle + '</p></div>' + chips() +
+    '</h1><p>' + subtitle + '</p></div>' + sourceChoices() + chips() +
     (state.searching ? skeleton(8) : state.results.length
-      ? section('Lagu dan video musik', rows(state.results), 'HASIL DARI YOUTUBE.JS')
-      : state.query ? empty('Belum ada hasil', 'Coba kata kunci lain atau periksa akses pencarian YouTube.js.', 'search')
+      ? section('Musik ditemukan', rows(state.results), state.source==='audius'?'AUDIO LANGSUNG · AUDIUS':'YOUTUBE.JS · EKSPERIMEN')
+      : state.query ? empty('Belum ada hasil', 'Coba kata kunci lain atau ganti sumber musik.', 'search')
         : section('Mulai dari sini', cards(state.home.length ? state.home : state.catalog, 12), 'REKOMENDASI'));
 }
 function libraryView() {
@@ -244,7 +251,7 @@ async function search(term) {
   state.view = 'search';
   render();
   try {
-    const data = await api('/api/v1/search?provider=youtube&q=' + encodeURIComponent(term) + '&limit=30');
+    const data = await api('/api/v1/search?provider=' + state.source + '&q=' + encodeURIComponent(term) + '&limit=30');
     if (seq !== state.sequence) return;
     state.results = uniq(data.tracks || []);
     state.results.forEach(remember);
@@ -262,7 +269,7 @@ async function loadHome() {
   render();
   try {
     const [catalogResult, homeResult] = await Promise.allSettled([
-      api('/api/v1/catalog'), api('/api/v2/home')
+      api('/api/v1/catalog'), api('/api/v2/home?source=' + state.source)
     ]);
     if (catalogResult.status === 'fulfilled') state.catalog = catalogResult.value.tracks || [];
     if (homeResult.status === 'fulfilled') state.home = homeResult.value.tracks || [];
@@ -275,6 +282,10 @@ async function loadHome() {
   }
 }
 function audioUrl(t) {
+  if (t?.provider === 'audius' && typeof t.audio === 'string' &&
+      /^https:\/\/api\.audius\.co\/v1\/tracks\/[A-Za-z0-9_-]{2,60}\/stream\?app_name=AurelisSymphony$/.test(t.audio)) {
+    return t.audio;
+  }
   if (t?.audio && typeof t.audio === 'string' && t.audio.startsWith('/')) return t.audio;
   const id = t?.videoId || (String(t?.id || '').startsWith('yt-') ? String(t.id).slice(3) : '');
   return /^[a-zA-Z0-9_-]{11}$/.test(id) ? '/api/v2/audio/' + id : '';
@@ -283,6 +294,7 @@ function currentTime() { return Number(audio.currentTime) || 0; }
 function currentDuration() {
   return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Number(state.current?.duration) || 0;
 }
+function emit(name) { window.dispatchEvent(new CustomEvent('aurelis:' + name)); }
 function setPlayer() {
   const t = state.current;
   $('playerTitle').textContent = t?.title || 'Belum ada lagu';
@@ -294,6 +306,7 @@ function setPlayer() {
   $('shuffleButton').classList.toggle('active', state.shuffle);
   $('repeatButton').classList.toggle('active', state.repeat > 0);
   updateTime();
+  emit('player');
 }
 function updateTime() {
   const duration = currentDuration();
@@ -304,11 +317,12 @@ function updateTime() {
   $('seek').style.setProperty('--pct', percent + '%');
   $('mobileProgress').style.width = percent + '%';
   syncLyrics();
+  emit('time');
 }
 async function play(t) {
   if (!t) return;
   if (!t.id) return;
-  const seq = ++state.sequence;
+  const seq = ++state.playSequence;
   state.current = t;
   remember(t);
   state.history = [t.id, ...state.history.filter(id => id !== t.id)].slice(0, 70);
@@ -316,6 +330,7 @@ async function play(t) {
   state.lyricsIndex = -1;
   state.panelError = '';
   save();
+  emit('track');
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
@@ -330,7 +345,7 @@ async function play(t) {
   try {
     await audio.play();
   } catch (e) {
-    if (seq === state.sequence) {
+    if (seq === state.playSequence) {
       state.panelError = 'Pemutaran langsung tidak tersedia untuk lagu ini.';
       toast('Tidak dapat memutar sumber audio. Coba lagu lain.', true);
       if (state.drawer) renderPanel();
@@ -349,23 +364,26 @@ async function play(t) {
 async function recommend(t, seq) {
   const others = uniq([...state.results, ...state.home, ...state.catalog])
     .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id));
-  state.suggestions = others.slice(0, 3);
+  state.suggestions = state.autoplay ? others.slice(0, 6) : [];
+  emit('queue');
+  if (!state.autoplay) return;
   if (state.drawer === 'queue') renderPanel();
-  if (t.provider !== 'youtube' && !t.videoId && !String(t.id).startsWith('yt-')) return;
+  if (!['youtube','audius'].includes(t.provider) && !t.videoId && !String(t.id).startsWith('yt-')) return;
   try {
-    const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', exclude: t.id, limit: '15' });
+    const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', provider: t.provider === 'audius' ? 'audius' : 'youtube', exclude: t.id, limit: '15' });
     const result = await api('/api/v1/recommendations?' + params);
-    if (seq !== state.sequence || state.current?.id !== t.id) return;
+    if (seq !== state.playSequence || state.current?.id !== t.id) return;
     state.suggestions = uniq(result.tracks || [])
-      .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id)).slice(0, 3);
+      .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id)).slice(0, 8);
     state.suggestions.forEach(remember);
     save();
+    emit('queue');
     if (state.drawer === 'queue') renderPanel();
   } catch {}
 }
 function next() {
   const queued = state.queue.shift();
-  const suggested = !queued && state.suggestions.shift();
+  const suggested = !queued && state.autoplay && state.suggestions.shift();
   const selected = queued || suggested;
   if (!selected) {
     if (state.repeat) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -373,6 +391,7 @@ function next() {
     return;
   }
   save();
+  emit('queue');
   play(selected);
 }
 function previous() {
@@ -393,6 +412,7 @@ function like(t) {
   remember(t);
   save();
   setPlayer();
+  emit('favorites');
   render();
   toast(state.favorite.has(t.id) ? 'Ditambahkan ke lagu disukai' : 'Dihapus dari lagu disukai');
 }
@@ -402,6 +422,7 @@ function addQueue(t, first = false) {
   if (first) state.queue.unshift(t); else state.queue.push(t);
   save();
   if (state.drawer === 'queue') renderPanel();
+  emit('queue');
   toast(first ? 'Akan diputar selanjutnya' : 'Ditambahkan ke antrean');
 }
 function openPanel(type) {
@@ -465,6 +486,7 @@ async function loadLyrics(t) {
   if (Array.isArray(t.lyrics) && t.lyrics.length) {
     state.lyrics = { source:'Aurelis Originals', synced:true, lines:t.lyrics };
     if (state.drawer === 'lyrics') renderPanel();
+    emit('lyrics');
     return;
   }
   try {
@@ -475,10 +497,12 @@ async function loadLyrics(t) {
     if (token !== state.lyricSequence || state.current?.id !== t.id) return;
     state.lyrics = data.result || { source:'unavailable', synced:false, lines:[] };
     if (state.drawer === 'lyrics') renderPanel();
+    emit('lyrics');
   } catch {
     if (token === state.lyricSequence) {
       state.lyrics = { source:'unavailable', synced:false, lines:[] };
       if (state.drawer === 'lyrics') renderPanel();
+      emit('lyrics');
     }
   }
 }
@@ -571,6 +595,17 @@ function handleClick(event) {
   if (type === 'play') play(t);
   else if (type === 'like') like(t);
   else if (type === 'menu') showTrackMenu(t);
+  else if (type === 'source') {
+    if (!['audius','youtube'].includes(btn.dataset.source) || btn.dataset.source===state.source) return;
+    state.source=btn.dataset.source;
+    store('sourceChoice',state.source);
+    state.results=[];
+    toast(state.source==='audius'?'Audius: streaming audio langsung':'YouTube.js: streaming masih eksperimen');
+    if (state.view==='search') {
+      if (state.query) search(state.query);
+      else render();
+    } else loadHome();
+  }
   else if (type === 'genre') openGenre(btn.dataset.term);
   else if (type === 'explore') { navigate('search'); $('searchInput').focus(); }
   else if (type === 'new-playlist') newPlaylist();
@@ -586,6 +621,7 @@ function handleClick(event) {
     if (btn.dataset.kind === 'manual') state.queue.splice(index, 1);
     else state.suggestions.splice(index, 1);
     save(); renderPanel();
+    emit('queue');
   }
   else if (type === 'lyric-seek' && btn.dataset.time !== '') {
     const time = Number(btn.dataset.time);
@@ -633,9 +669,9 @@ function setupEvents() {
   });
   $('queueButton').addEventListener('click', () => openPanel('queue'));
   $('lyricsButton').addEventListener('click', () => openPanel('lyrics'));
-  $('expandButton').addEventListener('click', () => openPanel('now'));
-  $('playerArt').addEventListener('click', () => openPanel('now'));
-  $('playerTitle').addEventListener('click', () => openPanel('now'));
+  $('expandButton').addEventListener('click', () => window.AurelisFullscreen?.open());
+  $('playerTrack').addEventListener('click', event => { if (!event.target.closest('#playerLike')) window.AurelisFullscreen?.open(); });
+  $('playerTitle').addEventListener('click', () => window.AurelisFullscreen?.open());
   $('closePanel').addEventListener('click', closePanel);
   $('scrim').addEventListener('click', closePanel);
   all('[data-panel]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.panel)));
@@ -661,11 +697,25 @@ function setupEvents() {
   audio.addEventListener('ended', () => {
     if (state.repeat === 2) { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
   });
-  audio.addEventListener('error', () => {
-    if (!state.current) return;
-    state.panelError = 'Stream gagal / format tidak didukung / upstream membatasi akses. Coba lagu lain.';
-    toast('Tidak bisa memutar ' + state.current.title + '. Sumber audio membatasi akses.', true);
-    if (state.drawer === 'now') renderPanel();
+  audio.addEventListener('error', async () => {
+    if (!state.current || !audio.src) return;
+    const t = state.current;
+    const id = t.videoId || (String(t.id).startsWith('yt-') ? String(t.id).slice(3) : '');
+    state.panelError = 'Sumber audio gagal dimuat.';
+    if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+      try {
+        const result = await fetch('/api/v2/audio/' + id + '?probe=1');
+        const detail = await result.json();
+        if (state.current?.id === t.id && !detail.ok) {
+          state.panelError = detail.message || detail.code || state.panelError;
+        }
+      } catch {}
+    }
+    if (state.current?.id === t.id) {
+      toast(state.panelError, true);
+      emit('error');
+      if (state.drawer === 'now') renderPanel();
+    }
   });
   document.addEventListener('keydown', e => {
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
@@ -684,6 +734,49 @@ function setupEvents() {
     }
   }
 }
+
+function snapshot() {
+  return {
+    current:state.current, paused:audio.paused, time:currentTime(),
+    duration:currentDuration(), queue:state.queue.slice(),
+    suggestions:state.suggestions.slice(), autoplay:state.autoplay,
+    shuffle:state.shuffle, repeat:state.repeat, favorites:[...state.favorite],
+    lyrics:state.lyrics, lyricIndex:state.lyricsIndex, error:state.panelError,
+    volume:audio.volume
+  };
+}
+window.Aurelis = Object.freeze({
+  snapshot, play, toggle, next, previous,
+  seek(sec){ if (Number.isFinite(sec) && audio.seekable.length) audio.currentTime=Math.max(0,Math.min(sec,currentDuration())); },
+  setVolume(value){ audio.volume=Math.max(0,Math.min(1,Number(value)||0)); $('volume').value=String(Math.round(audio.volume*100)); store('volume',audio.volume);emit('player'); },
+  toggleLike(){like(state.current);},
+  toggleAutoplay(){
+    state.autoplay=!state.autoplay;
+    if(!state.autoplay) state.suggestions=[];
+    save();emit('queue');
+    if(state.autoplay && state.current) recommend(state.current,state.playSequence);
+    return state.autoplay;
+  },
+  toggleShuffle(){ $('shuffleButton').click();emit('queue'); },
+  toggleRepeat(){ $('repeatButton').click();emit('queue'); },
+  playItem(kind,index){
+    const list=kind==='manual' ? state.queue : state.suggestions;
+    const t=list[Number(index)];
+    if(!t)return;
+    list.splice(Number(index),1);save();emit('queue');play(t);
+  },
+  removeItem(kind,index){
+    const list=kind==='manual' ? state.queue : state.suggestions;
+    if (!list || !Number.isInteger(Number(index))) return;
+    list.splice(Number(index),1);save();emit('queue');
+  },
+  moveQueue(index,direction){
+    index=Number(index);const next=index+Number(direction);
+    if(index<0||index>=state.queue.length||next<0||next>=state.queue.length)return;
+    [state.queue[index],state.queue[next]]=[state.queue[next],state.queue[index]];
+    save();emit('queue');
+  }
+});
 async function boot() {
   setupEvents();
   setPlayer();

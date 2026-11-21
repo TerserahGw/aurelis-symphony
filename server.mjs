@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { searchMusic, lookupYouTube, getSearchStatus } from './server/youtube.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
+import { translateLyrics } from './server/translation.mjs';
+import { searchAudius, trendingAudius } from './server/audius.mjs';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -87,16 +89,32 @@ async function api(req, res, url, head) {
   const duration = bounded(q.get('duration'), 0, 7200);
 
   if (endpoint === '/api/v1/health' || endpoint === '/health') {
-    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'experimental-direct-audio-and-licensed-audio', time: new Date().toISOString() }, head);
+    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'experimental-native-audio-and-licensed-audio', time: new Date().toISOString() }, head);
   }
   if (endpoint === '/api/v1/config') return response(res, 200, {
     name: 'Aurelis Symphony', version: APP_VERSION, cloudLibrary,
-    searchProviders: ['youtube', 'catalog'], lyricsSources: LYRIC_SOURCES,
-    discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus()
+    searchProviders: ['audius', 'youtube', 'catalog'], lyricsSources: LYRIC_SOURCES,
+    discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus(), translation: {provider:'MyMemory',target:'id',optIn:true}
   }, head);
-  if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint);
+  if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint, q);
+  if (endpoint === '/api/v2/translate') {
+    if (req.method !== 'POST') return apiError(res,405,'method_not_allowed','Use POST.',head);
+    if (rateLimited(req)) return apiError(res,429,'rate_limited','Terlalu banyak permintaan terjemahan.',head);
+    let input;
+    try { input=await readJson(req,12_000); }
+    catch(e){ e.status=400; throw e; }
+    const output=await translateLyrics(input);
+    return response(res,output.ok ? 200 : (output.code ? 400 : 503),output,head);
+  }
   if (endpoint === '/api/v2/status') return response(res, 200, { ok: true, version: APP_VERSION, stream: directAudioStatus() }, head);
   if (endpoint === '/api/v2/home') {
+    if (q.get('source') !== 'youtube') {
+      try {
+        const tracks = await trendingAudius(18);
+        if (tracks.length) return response(res,200,{ title:'Audius Trending', provider:'audius', tracks },head);
+      } catch(e) { console.warn('Audius home unavailable:',e.message); }
+      return response(res,200,{title:'Aurelis Originals',provider:'catalog',tracks:catalog,fallback:true},head);
+    }
     const seeds = ['late night chill music', 'indie pop songs', 'japanese city pop', 'top hits music'];
     const seed = capped(q.get('seed'), 75) || seeds[Number(new Date().getUTCDay()) % seeds.length];
     try { return response(res, 200, { title:'Made for your mood', tracks:await searchMusic(seed, 16), seed }, head); }
@@ -117,15 +135,18 @@ async function api(req, res, url, head) {
     if (!isRec && provider === 'catalog') {
       return api(req, res, new URL('/api/v1/catalog?q=' + encodeURIComponent(query), 'http://localhost'), head);
     }
-    if (provider !== 'youtube') return apiError(res, 400, 'invalid_provider', 'Only youtube or catalog are supported in v2.', head);
+    if (!['youtube','audius'].includes(provider)) return apiError(res, 400, 'invalid_provider', 'Only audius, youtube, and catalog are supported.', head);
     if (rateLimited(req)) return apiError(res, 429, 'rate_limited', 'Too many search requests.', head);
     const term = isRec ? capped([artist, track].filter(Boolean).join(' '), 160) : query;
     if (!term) return apiError(res, 400, 'query_required', 'Provide q or track / artist.', head);
     try {
-      const tracks = await searchMusic(isRec ? term + ' similar music' : term, bounded(q.get('limit'), 20, 30) || 20);
+      const limit = bounded(q.get('limit'),20,30) || 20;
+      const tracks = provider === 'audius'
+        ? await searchAudius(isRec ? (artist || track) : term, limit)
+        : await searchMusic(isRec ? term + ' similar music' : term,limit);
       const filtered = isRec ? tracks.filter(t => t.id !== q.get('exclude')) : tracks;
-      return response(res, 200, { provider: 'youtube', tracks: filtered, ...(isRec ? { strategy: 'related-search', personalized: false } : {}),
-        notice: 'Direct YouTube audio is unofficial and may be unavailable; no embedded player or DRM bypass is used.' }, head);
+      return response(res, 200, { provider, tracks: filtered, ...(isRec ? { strategy: 'related-search', personalized: false } : {}),
+        notice: provider === 'audius' ? 'Audius provides an authorized native audio stream; songs differ from YouTube.' : 'YouTube.js direct audio remains unofficial and may be unavailable.' }, head);
     } catch (e) {
       console.warn('Discovery failed:', e.message);
       return response(res, 503, { error: 'search_unavailable', message: 'The music discovery service is temporarily unavailable.', tracks: [] }, head);
@@ -203,7 +224,7 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, 'http://localhost'); } catch { return apiError(res, 400, 'bad_url', 'Invalid URL.', head); }
   const isApi = url.pathname.startsWith('/api/') || url.pathname === '/health';
-  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT'))
+  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT') && !(url.pathname === '/api/v2/translate' && req.method === 'POST'))
     return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   if (!isApi && !['GET', 'HEAD'].includes(req.method)) return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   try {
