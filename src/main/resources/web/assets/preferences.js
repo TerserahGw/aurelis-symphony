@@ -25,7 +25,7 @@ const icons={
 const ico=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[n]+'</svg>';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clamp=(v,min,max)=>Math.min(max,Math.max(min,Number(v)||0));
-const round=v=>Math.round(v*10)/10;
+const round=v=>Math.round(v*100)/100;
 const details={
   audio:['PENGALAMAN MENDENGAR','Pemutaran','Atur bagaimana lagu diputar dan bagaimana antrean dibuat.'],
   lyrics:['SINKRONISASI','Lirik','Teks, waktu, dan efek karaoke.'],
