@@ -83,7 +83,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.equal((await fetch(base+'/assets/docs.js')).status,200);
     assert.equal((await fetch(base+'/assets/docs.css')).status,200);
     const openapi=await (await fetch(base+'/api/v1/openapi.json')).json();
-    assert.equal(openapi.info.version,'2.3.0');
+    assert.equal(openapi.info.version,'2.3.1');
     assert.equal((await fetch(base+'/assets/full-player.js')).status,200);
     assert.equal((await fetch(base+'/assets/full-player.css')).status,200);
     const invalidTranslation=await fetch(base+'/api/v2/translate',{
