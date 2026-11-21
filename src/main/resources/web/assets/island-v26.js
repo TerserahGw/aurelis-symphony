@@ -91,7 +91,6 @@
   }
   const washes=ambient?[...ambient.querySelectorAll('.island-wash')]:[];
   let lastUrls=['','','',''];
-  let ambientToken=0;
   function updateAmbient(){
     ambientRefresh=null;
     if(!washes.length)return;
@@ -102,6 +101,7 @@
     const urls=[];
     for(const el of candidates){
       const src=el.currentSrc||el.getAttribute('src')||'';
+      if(!src)continue;
       try{
         const url=new URL(src,location.href);
         if(url.protocol!=='https:'&&url.origin!==location.origin)continue;
@@ -110,7 +110,6 @@
         if(urls.length===4)break;
       }catch{}
     }
-    const token=++ambientToken;
     for(let i=0;i<washes.length;i++){
       const url=urls[i]||'';
       if(lastUrls[i]===url)continue;
@@ -119,7 +118,6 @@
       wash.classList.add('is-switching');
       clearTimeout(blurJobs[i]);
       blurJobs[i]=setTimeout(()=>{
-        if(token!==ambientToken)return;
         wash.style.backgroundImage=url?'url('+JSON.stringify(url)+')':'none';
         wash.classList.remove('is-switching');
       },reduced()?0:160);
@@ -159,13 +157,14 @@
     const mini='translate('+rect.left+'px,'+rect.top+'px) scale('+
       (rect.width/w)+','+(rect.height/h)+')';
     const start=full?mini:'none',end=full?'none':mini;
-    morphAnimation=ghost.animate([
+    const anim=ghost.animate([
       {transform:start,borderRadius:full?'32px':'0px',opacity:full?.9:.2,offset:0},
       {transform:full?'translate(0,0) scale(.98)':'translate(0,0) scale(.98)',
        borderRadius:full?'15px':'12px',opacity:full?.48:.55,offset:.62},
       {transform:end,borderRadius:full?'0px':'32px',opacity:0,offset:1}
     ],{duration:full?570:420,easing:'cubic-bezier(.2,.8,.22,1)',fill:'both'});
-    morphAnimation.finished.catch(()=>{}).finally(()=>{ghost.remove();morphAnimation=null;});
+    morphAnimation=anim;
+    anim.finished.catch(()=>{}).finally(()=>{ghost.remove();if(morphAnimation===anim)morphAnimation=null;});
   }
   window.AurelisIsland=Object.freeze({
     openSearch,closeSearch:()=>setExpanded(false),morph,
