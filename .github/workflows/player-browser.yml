@@ -78,7 +78,16 @@ jobs:
             await page.locator('#trackPopover [data-menu=play]').click();
             await page.goto('http://127.0.0.1:18080/docs/api',{waitUntil:'domcontentloaded'});
             await page.locator('.docs-endpoint').first().waitFor();
-            await page.locator('[data-try=health]').click();
+            await page.locator('[data-try=health]').scrollIntoViewIfNeeded();
+            await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'-docs.png'});
+            console.log('Docs geometry', await page.evaluate(()=>{
+              const button=document.querySelector('[data-try=health]');
+              const rect=button.getBoundingClientRect(), hit=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);
+              return {button:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},
+                hit:hit?.outerHTML?.slice(0,140),side:document.querySelector('.docs-side')?.getBoundingClientRect().width,
+                viewport:innerWidth};
+            }));
+            await page.locator('[data-try=health]').click({timeout:10000});
             await page.locator('#result-health').waitFor({state:'visible',timeout:5000});
             console.log((mobile?'Mobile':'Desktop')+' player/settings/popover/API docs OK');
             await context.close();
