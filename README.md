@@ -36,7 +36,7 @@
 
 YouTube's Developer Policies do not permit separating audio from video through YouTube API Services; this experimental mode is **not a supported or officially compliant YouTube integration**. Do not assume unrestricted access or redistribution rights. For a public service, use recordings you own or have permission to distribute, or use an authorized platform integration.
 
-This release enables AURELIS_STREAM_EVAL by default using a bounded Node VM to help YouTube.js decipher available playback URLs. It executes upstream-supplied script in the Node process and **carries security risk**; Node VM is not a complete security boundary. Set AURELIS_STREAM_EVAL=true to turn it off; direct streaming may then fail more often. Even with deciphering enabled, playback can fail because of upstream restrictions.
+This release enables AURELIS_STREAM_EVAL by default using a bounded Node VM to help YouTube.js decipher available playback URLs. It executes upstream-supplied script in the Node process and **carries security risk**; Node VM is not a complete security boundary. Set AURELIS_STREAM_EVAL=false to turn it off; direct streaming may then fail more often. Even with deciphering enabled, playback can fail because of upstream restrictions.
 
 See https://developers.google.com/youtube/terms/developer-policies/ and https://ytjs.dev/guide/getting-started
 
