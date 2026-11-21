@@ -433,7 +433,10 @@ async function recommend(t,seq) {
 }
 function takeNext(list){
   if(!list?.length)return null;
-  const index=state.shuffle?Math.floor(Math.random()*list.length):0;
+  const alternatives=list.map((t,i)=>({t,i})).filter(x=>x.t?.id!==state.current?.id);
+  const index=state.shuffle
+    ? (alternatives.length?alternatives[Math.floor(Math.random()*alternatives.length)].i:Math.floor(Math.random()*list.length))
+    : 0;
   return list.splice(index,1)[0]||null;
 }
 function next() {
