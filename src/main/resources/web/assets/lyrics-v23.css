@@ -116,3 +116,6 @@
 }
 .aurelis-reduce-motion .fp-lyric.active .fp-lyric-body{animation:none!important}
 .aurelis-reduce-motion .fp-lyrics-pane{scroll-behavior:auto}
+
+/* Line-timed subtitles are never rendered with progressive fill. */
+.fp-line-progress{background:none!important;color:#f5fff9!important;-webkit-text-fill-color:currentColor!important;filter:none!important}
