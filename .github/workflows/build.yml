@@ -1,39 +1,30 @@
-name: Build, test, and publish Docker image
-
+name: Build, test and publish Docker image
 on:
   push:
   pull_request:
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.2.1'
-      - name: Build distribution and test
-        run: gradle --no-daemon test installDist
-      - name: Validate browser scripts and smoke-test HTTP/audio routes
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check syntax and offline HTTP tests
         run: |
-          node --check src/main/resources/web/assets/app.js
-          node --check src/main/resources/web/assets/official-player.js
-          sh scripts/smoke-test.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: aurelis-symphony-java17
-          path: build/install/aurelis-symphony/
-
+          npm run check
+          npm test
+      - name: Verify production Docker image
+        run: docker build -t aurelis-symphony:ci .
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,9 +44,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/terserahgw/aurelis-symphony:latest
+          tags: ghcr.io/terserahgw/aurelis-symphony:latest,ghcr.io/terserahgw/aurelis-symphony:2.0.0
           labels: |
             org.opencontainers.image.source=https://github.com/TerserahGw/aurelis-symphony
-            org.opencontainers.image.description=Aurelis Symphony Java 17 web music player
+            org.opencontainers.image.description=Aurelis Symphony 2.0 Node.js player
           cache-from: type=gha
           cache-to: type=gha,mode=max
