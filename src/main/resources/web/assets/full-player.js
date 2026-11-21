@@ -276,6 +276,27 @@ function romanize(value) {
   result=hangulRomaji(result);
   return result!==txt?result:'';
 }
+function renderTimedWords(line){
+  const original=String(line.text||'');
+  const tokens=line.words||[];
+  if(!original||!tokens.length)return '';
+  const parts=[];
+  let cursor=0;
+  for(const word of tokens){
+    const token=String(word.text||'').trim();
+    const start=Number(word.start),end=Number(word.end);
+    if(!token||!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return '';
+    let at=original.indexOf(token,cursor);
+    if(at<0)at=original.toLowerCase().indexOf(token.toLowerCase(),cursor);
+    if(at<0)return ''; // don't falsify lyrics if provider word tokenization differs
+    if(at>cursor)parts.push('<span class="fp-word-gap">'+esc(original.slice(cursor,at))+'</span>');
+    parts.push('<span class="fp-word" data-word-start="'+start+
+      '" data-word-end="'+end+'">'+esc(original.slice(at,at+token.length))+'</span>');
+    cursor=at+token.length;
+  }
+  if(cursor<original.length)parts.push('<span class="fp-word-gap">'+esc(original.slice(cursor))+'</span>');
+  return parts.join('');
+}
 function renderLyrics(force=false) {
   if(!opened||tab!=='lyrics')return;
   const s=snapshot(),l=s.lyrics;
@@ -293,9 +314,9 @@ function renderLyrics(force=false) {
       const words=romanEnabled?romanize(line.text):'';
       const translated=translationEnabled?(translations.get(key+':'+i)||line.translation||''):'';
       let text;
-      if(options.karaoke!==false&&Array.isArray(line.words)&&line.words.length){
-        text='<span class="fp-line-words">'+line.words.map(w=>'<span class="fp-word" data-word-start="'+
-          Number(w.start||0)+'" data-word-end="'+Number(w.end||w.start+.45)+'">'+esc(w.text||'')+'</span>').join('')+'</span>';
+      const timed=options.karaoke!==false?renderTimedWords(line):'';
+      if(timed){
+        text='<span class="fp-line-words">'+timed+'</span>';
       }else{
         text='<span class="fp-line-plain">'+esc(line.text)+'</span>';
       }
