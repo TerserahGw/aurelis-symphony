@@ -9,6 +9,10 @@ on:
       - src/main/resources/web/assets/preferences.js
       - src/main/resources/web/assets/preferences.css
       - src/main/resources/web/assets/lyrics-v23.css
+      - src/main/resources/web/assets/glass-v24.css
+      - src/main/resources/web/assets/media-session.js
+      - server/lyrics.mjs
+      - server/vendor/lirik-sync.mjs
       - src/main/resources/web/assets/docs.js
       - src/main/resources/web/docs/api.html
       - src/main/resources/web/index.html
@@ -48,6 +52,17 @@ jobs:
             await page.locator('#playerTrack').click({timeout:10000});
             await page.waitForSelector('#fullPlayer.open',{timeout:8000});
             if(!await page.locator('#fpLyricsPane').isVisible())throw new Error('Lyrics not shown');
+            if(await page.locator('.fp-line-progress').count())throw new Error('Line timed lyrics must not show fabricated progress');
+            const sessionMeta=await page.evaluate(()=>{
+              const track=window.Aurelis?.snapshot?.().current;
+              const m=navigator.mediaSession?.metadata;
+              return {supported:!!navigator.mediaSession&&!!window.MediaMetadata,
+                trackTitle:track?.title,trackArtist:track?.artist,
+                title:m?.title,artist:m?.artist,artwork:m?.artwork?.length||0};
+            });
+            if(sessionMeta.supported && sessionMeta.trackTitle && (sessionMeta.title!==sessionMeta.trackTitle ||
+               sessionMeta.artist!==sessionMeta.trackArtist || !sessionMeta.artwork))
+              throw new Error('Media Session song title, artist or cover mismatch: '+JSON.stringify(sessionMeta));
             await page.locator('#fpQueueTab').click();
             if(!await page.locator('#fpAutoSwitch').isVisible())throw new Error('Queue/autoplay not shown');
             const old=await page.locator('#fpAutoSwitch').getAttribute('aria-checked');
@@ -75,6 +90,9 @@ jobs:
             await page.locator('#fullPlayer').waitFor({state:'hidden',timeout:4500});
             await page.locator('#settingsButton').click();
             await page.locator('#aurelisPreferences').waitFor({state:'visible',timeout:5000});
+            const settingsGlass=await page.locator('.asp-panel').evaluate(el=>
+              getComputedStyle(el).backdropFilter||getComputedStyle(el).webkitBackdropFilter);
+            if(!settingsGlass.includes('blur'))throw new Error('Settings not frosted glass');
             await page.locator('[data-tab=lyrics]').click();
             await page.locator('[data-range=lyricOffset]').evaluate(el=>{el.value='0.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
             if(!(await page.locator('[data-output=lyricOffset]').textContent()).includes('0.5'))throw new Error('Lyric offset setting did not apply');
@@ -84,6 +102,9 @@ jobs:
             await page.locator('#aspClose').click();
             await page.locator('.music-card .card-more').first().click({timeout:10000});
             await page.locator('#trackPopover').waitFor({state:'visible',timeout:4000});
+            const songGlass=await page.locator('#trackPopover').evaluate(el=>
+              getComputedStyle(el).backdropFilter||getComputedStyle(el).webkitBackdropFilter);
+            if(!songGlass.includes('blur'))throw new Error('Song menu lacks glass effect');
             if(await page.locator('#trackPopover').evaluate(el=>el.getBoundingClientRect().width)>285)throw new Error('Song popover too large');
             await page.locator('#trackPopover [data-menu=offset-plus]').click();
             if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))throw new Error('Song offset failed');
@@ -128,6 +149,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aurelis-2-3-1-player-screenshots
+          name: aurelis-2-4-glass-lyrics-media-screenshots
           path: /tmp/aurelis-*.png
           if-no-files-found: ignore
