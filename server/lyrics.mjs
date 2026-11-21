@@ -1,6 +1,6 @@
 // Lightweight lyrics integrations for the Node runtime.
 export const LYRIC_SOURCES = Object.freeze([
-  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: true, availability: 'best-effort' },
+  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: false, availability: 'best-effort' },
   { id: 'lyricsovh', name: 'lyrics.ovh', synced: false, wordLevel: false, availability: 'best-effort' }
 ]);
 const cache = new Map();
