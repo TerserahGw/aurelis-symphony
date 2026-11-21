@@ -10,7 +10,7 @@ import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyri
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -88,7 +88,8 @@ function contextFromQuery(q,name,max=10) {
     if (!Array.isArray(rows))return [];
     return rows.slice(0,max).filter(row=>row&&typeof row==='object')
       .map(row=>({id:String(row.id||'').slice(0,40),
-        title:String(row.title||'').slice(0,150),artist:String(row.artist||'').slice(0,100)}));
+        title:String(row.title||'').slice(0,150),artist:String(row.artist||'').slice(0,100),
+        album:String(row.album||'').slice(0,120)}));
   }catch{return [];}
 }
 async function api(req, res, url, head) {
@@ -121,12 +122,13 @@ async function api(req, res, url, head) {
   if (endpoint === '/api/v2/home') {
     if (rateLimited(req)) return apiError(res,429,'rate_limited','Too many recommendation requests.',head);
     const recent=contextFromQuery(q,'recent',8);
+    const liked=contextFromQuery(q,'liked',10);
     const hint=capped(q.get('mood')||q.get('seed'),65);
     const mode=['balanced','familiar','discover'].includes(q.get('mode'))?q.get('mode'):'balanced';
-    const current=recent[0]||{title:'',artist:'',album:hint};
+    const current=recent[0]||liked[0]||{title:'',artist:'',album:hint};
     try {
       const data=await createRadio({search:searchMusic,current,recent:recent.slice(1),
-        hint:hint||'indie pop chill',mode,limit:18});
+        liked,hint:hint||'indie pop chill',mode,limit:18});
       if(data.tracks.length)return response(res,200,{title:'Dibuat untuk suasanamu',...data},head);
       return response(res,200,{title:'Aurelis Originals',tracks:catalog,fallback:true},head);
     }catch(e){console.warn('Home radio unavailable:',e.message);
@@ -156,10 +158,11 @@ async function api(req, res, url, head) {
       if (isRec) {
         const current={id:capped(q.get('exclude'),40),title:track,artist,
           album:capped(q.get('album'),100)};
-        const recent=contextFromQuery(q,'recent',10), queued=contextFromQuery(q,'queued',10);
+        const recent=contextFromQuery(q,'recent',10), liked=contextFromQuery(q,'liked',10),
+          queued=contextFromQuery(q,'queued',10);
         const hint=capped(q.get('mood'),65);
         const mode=['balanced','familiar','discover'].includes(q.get('mode'))?q.get('mode'):'balanced';
-        const radio=await createRadio({search:searchMusic,current,recent,queued,hint,mode,limit});
+        const radio=await createRadio({search:searchMusic,current,recent,liked,queued,hint,mode,limit});
         return response(res,200,{provider:'youtube',...radio,
           notice:'Metadata-informed radio, not waveform/audio-embedding analysis. Actual audio can be unavailable.'},head);
       }
