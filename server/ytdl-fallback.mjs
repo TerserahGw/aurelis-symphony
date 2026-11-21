@@ -42,7 +42,12 @@ export async function fallbackAudio({id,req,res,range,probe,signal}) {
     // Same watch ID, preserving the song chosen from YouTube.js search.
     info=await client.getInfo('https://www.youtube.com/watch?v='+id,{signal});
   } catch(e) {
-    throw upstreamError('alternate_lookup_failed','Modul alternatif tidak mendapatkan informasi audio YouTube.', String(e?.message||e).slice(0,100));
+    const detail=String(e?.message||e).slice(0,140);
+    if (/confirm you.?re not a bot|sign.?in.*bot|LOGIN_REQUIRED|SignInConfirmNotBot/i.test(detail)) {
+      throw upstreamError('youtube_bot_challenge',
+        'YouTube meminta verifikasi anti-bot dari IP server. Audio tidak tersedia tanpa sesi yang diizinkan.',detail);
+    }
+    throw upstreamError('alternate_lookup_failed','Modul alternatif tidak mendapatkan informasi audio YouTube.',detail);
   }
   const formats=(info?.formats || []).filter(f => f?.hasAudio===true && f?.hasVideo===false
     && !f.isDrm && !f.isLive && !f.isOtf && ['mp4','webm'].includes(f.container));
