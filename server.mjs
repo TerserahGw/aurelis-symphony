@@ -5,11 +5,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { searchMusic, lookupYouTube, getSearchStatus } from './server/youtube.mjs';
+import { createRadio } from './server/recommend.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
 
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.3.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -79,6 +80,17 @@ async function libraryApi(req, res, head) {
   finally { await fsp.rm(tmp, { force: true }).catch(() => {}); }
   response(res, 200, { ok: true }, head);
 }
+function contextFromQuery(q,name,max=10) {
+  const raw=q.get(name)||'';
+  if (!raw||raw.length>2800)return [];
+  try {
+    const rows=JSON.parse(raw);
+    if (!Array.isArray(rows))return [];
+    return rows.slice(0,max).filter(row=>row&&typeof row==='object')
+      .map(row=>({id:String(row.id||'').slice(0,40),
+        title:String(row.title||'').slice(0,150),artist:String(row.artist||'').slice(0,100)}));
+  }catch{return [];}
+}
 async function api(req, res, url, head) {
   const endpoint = url.pathname;
   const q = url.searchParams;
@@ -107,10 +119,18 @@ async function api(req, res, url, head) {
   }
   if (endpoint === '/api/v2/status') return response(res, 200, { ok: true, version: APP_VERSION, stream: directAudioStatus() }, head);
   if (endpoint === '/api/v2/home') {
-    const seeds = ['late night chill music', 'indie pop songs', 'japanese city pop', 'top hits music'];
-    const seed = capped(q.get('seed'), 75) || seeds[Number(new Date().getUTCDay()) % seeds.length];
-    try { return response(res, 200, { title:'Made for your mood', tracks:await searchMusic(seed, 16), seed }, head); }
-    catch { return response(res, 200, { title:'Aurelis Originals', tracks:catalog, fallback:true }, head); }
+    if (rateLimited(req)) return apiError(res,429,'rate_limited','Too many recommendation requests.',head);
+    const recent=contextFromQuery(q,'recent',8);
+    const hint=capped(q.get('mood')||q.get('seed'),65);
+    const mode=['balanced','familiar','discover'].includes(q.get('mode'))?q.get('mode'):'balanced';
+    const current=recent[0]||{title:'',artist:'',album:hint};
+    try {
+      const data=await createRadio({search:searchMusic,current,recent:recent.slice(1),
+        hint:hint||'indie pop chill',mode,limit:18});
+      if(data.tracks.length)return response(res,200,{title:'Dibuat untuk suasanamu',...data},head);
+      return response(res,200,{title:'Aurelis Originals',tracks:catalog,fallback:true},head);
+    }catch(e){console.warn('Home radio unavailable:',e.message);
+      return response(res,200,{title:'Aurelis Originals',tracks:catalog,fallback:true},head);}
   }
   if (endpoint === '/api/tracks' || endpoint === '/api/v1/catalog') {
     const filtered = catalog.filter(t => !query || (t.title + ' ' + t.artist).toLowerCase().includes(query.toLowerCase()));
@@ -132,11 +152,20 @@ async function api(req, res, url, head) {
     const term = isRec ? capped([artist, track].filter(Boolean).join(' '), 160) : query;
     if (!term) return apiError(res, 400, 'query_required', 'Provide q or track / artist.', head);
     try {
-      const limit = bounded(q.get('limit'),20,30) || 20;
-      const tracks = await searchMusic(isRec ? term + ' similar music' : term,limit);
-      const filtered = isRec ? tracks.filter(t => t.id !== q.get('exclude')) : tracks;
-      return response(res, 200, { provider, tracks: filtered, ...(isRec ? { strategy: 'related-search', personalized: false } : {}),
-        notice: 'YouTube-only. Streaming tries youtubei.js then @distube/ytdl-core for the same video ID.' }, head);
+      const limit=bounded(q.get('limit'),20,30)||20;
+      if (isRec) {
+        const current={id:capped(q.get('exclude'),40),title:track,artist,
+          album:capped(q.get('album'),100)};
+        const recent=contextFromQuery(q,'recent',10), queued=contextFromQuery(q,'queued',10);
+        const hint=capped(q.get('mood'),65);
+        const mode=['balanced','familiar','discover'].includes(q.get('mode'))?q.get('mode'):'balanced';
+        const radio=await createRadio({search:searchMusic,current,recent,queued,hint,mode,limit});
+        return response(res,200,{provider:'youtube',...radio,
+          notice:'Metadata-informed radio, not waveform/audio-embedding analysis. Actual audio can be unavailable.'},head);
+      }
+      const tracks=await searchMusic(term,limit);
+      return response(res,200,{provider:'youtube',tracks,
+        notice:'YouTube-only metadata. Audio playback uses two experimental engines.'},head);
     } catch (e) {
       console.warn('Discovery failed:', e.message);
       return response(res, 503, { error: 'search_unavailable', message: 'The music discovery service is temporarily unavailable.', tracks: [] }, head);
@@ -176,6 +205,7 @@ async function serveStatic(req, res, requestPath, head) {
   let pathname;
   try { pathname = decodeURIComponent(requestPath); } catch { return apiError(res, 400, 'bad_path', 'Invalid URL encoding.', head); }
   if (pathname === '/') pathname = '/index.html';
+  if (pathname === '/docs/api' || pathname === '/docs/api/') pathname = '/docs/api.html';
   if (pathname.includes('\\') || pathname.includes('\0') || pathname.split('/').some(p => p === '..' || p.startsWith('.')))
     return apiError(res, 404, 'not_found', 'File not found.', head);
   const file = path.resolve(WEB, '.' + pathname);

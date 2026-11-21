@@ -1,0 +1,94 @@
+/* Aurelis Preferences — restrained editorial utility, not a fullscreen song dialog */
+.asp-overlay[hidden]{display:none!important}
+.asp-overlay{position:fixed;inset:0;z-index:150;display:grid;place-items:center;padding:18px;background:rgba(4,8,10,.74);backdrop-filter:blur(8px);animation:asp-fade .22s ease}
+.asp-panel{display:grid;grid-template-columns:170px minmax(0,1fr);width:min(744px,100%);max-height:min(720px,calc(100dvh - 30px));min-height:460px;overflow:hidden;border:1px solid #36443e;border-radius:18px;box-shadow:0 35px 90px #000a;background:#171d1e;color:#eaf1ed;animation:asp-enter .3s cubic-bezier(.2,.8,.2,1);font-size:13px}
+.asp-panel *{box-sizing:border-box}
+.asp-sidebar{display:flex;flex-direction:column;min-width:0;padding:26px 12px 17px;background:#111719;border-right:1px solid #ffffff0d}
+.asp-sidebar h2{font-size:18px;font-weight:750;letter-spacing:-.6px;padding:0 13px;margin:0 0 5px}
+.asp-sidebar p{margin:0 13px 27px;color:#82958e;font-size:11px}
+.asp-nav{display:flex;flex-direction:column;gap:4px}
+.asp-nav button{width:100%;display:flex;align-items:center;gap:11px;border:0;background:transparent;color:#9aada5;text-align:left;padding:12px 13px;border-radius:9px;font-size:12px;font-weight:650;transition:background .18s,color .18s}
+.asp-nav button:hover{background:#ffffff09;color:#f4fff9}
+.asp-nav button.active{background:#a8e4c517;color:#c0f7d9}
+.asp-nav svg{height:17px;width:17px;stroke-width:1.8}
+.asp-side-bottom{margin-top:auto;padding:12px 13px 0;font:10px ui-monospace,monospace;letter-spacing:.3px;color:#677d74}
+.asp-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.asp-header{display:flex;align-items:start;justify-content:space-between;gap:18px;padding:25px 30px 17px;border-bottom:1px solid #ffffff0c}
+.asp-header .asp-kicker{font-size:10px;font-weight:780;letter-spacing:1.9px;color:#95cab2}
+.asp-header h3{margin:7px 0 5px;font-size:21px;letter-spacing:-.65px;font-weight:720}
+.asp-header p{margin:0;color:#96aba1;font-size:12px;line-height:1.55}
+.asp-close{display:grid;place-items:center;flex:0 0 auto;height:31px;width:31px;color:#a7b8b2;background:#ffffff09;border-radius:9px}
+.asp-close:hover{color:#fff;background:#ffffff17}
+.asp-scroll{overflow-y:auto;min-height:0;flex:1;padding:8px 30px 28px;scrollbar-color:#54685e40 transparent}
+.asp-section{padding-top:20px}
+.asp-section-title{display:flex;align-items:center;gap:12px;margin:10px 0 7px;color:#829d90;font-size:10px;font-weight:800;letter-spacing:1.6px}
+.asp-section-title:after{content:"";height:1px;flex:1;background:#ffffff12}
+.asp-setting{display:flex;align-items:center;gap:18px;justify-content:space-between;border-bottom:1px solid #ffffff0b;padding:15px 0;min-height:64px}
+.asp-setting:last-child{border-bottom:0}
+.asp-setting > div:first-child{flex:1;min-width:0}
+.asp-setting strong{font-size:12px;letter-spacing:.05px;color:#ecf5ef;display:block;font-weight:680}
+.asp-setting small{font-size:11px;line-height:1.5;display:block;margin-top:5px;color:#839b90;max-width:330px}
+.asp-control{flex:0 0 auto;display:flex;align-items:center;gap:10px}
+.asp-control output{min-width:37px;font-size:11px;font-variant-numeric:tabular-nums;color:#bbd7c9;text-align:right}
+.asp-control input[type=range]{width:120px;accent-color:#b1e8cc}
+.asp-control select{background:#101718;border:1px solid #43534a;border-radius:9px;padding:10px;color:#eaf2ec;max-width:160px;font-size:11px;outline:none}
+.asp-control select:focus-visible,.asp-control input:focus-visible{outline:2px solid #a8e8c8}
+.asp-switch{display:grid;place-items:center;width:43px;height:26px;background:#39433f;border:0;border-radius:16px;position:relative;transition:background .2s}
+.asp-switch:before{content:"";width:18px;height:18px;border-radius:50%;background:#e5eae8;position:absolute;left:4px;top:4px;transition:transform .22s}
+.asp-switch[aria-checked=true]{background:#95d7b4}
+.asp-switch[aria-checked=true]:before{transform:translateX(17px);background:#10231a}
+.asp-action{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;text-align:left;border:1px solid #ffffff13;padding:14px 15px;border-radius:12px;background:#1d2724;margin-top:12px}
+.asp-action:hover{background:#26312c;border-color:#bad6c44b}
+.asp-action strong{font-size:12px}
+.asp-action small{display:block;margin-top:5px;font-size:11px;color:#91a89b;line-height:1.45}
+.asp-action svg{width:18px;height:18px;flex-shrink:0;color:#a7ddbd}
+.asp-offset{font:600 11px ui-monospace,monospace;color:#d2f7de;min-width:38px;text-align:center}
+.asp-step{border:1px solid #ffffff25;border-radius:8px;background:#ffffff0b;color:#e1f0e5;width:29px;height:29px}
+.asp-reset{font-size:10px;color:#a1c6ae;text-decoration:underline;text-underline-offset:3px;padding:4px}
+.asp-notice{background:#abcfb20d;border:1px solid #abcfb21a;border-radius:11px;padding:13px 15px;font-size:11px;line-height:1.6;color:#9caea2;margin:16px 0 0}
+.asp-toast{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:#d1eedd;color:#15281c;padding:10px 16px;border-radius:10px;font-size:12px;box-shadow:0 10px 25px #0005;pointer-events:none}
+.song-popover[hidden]{display:none!important}
+.song-popover{position:fixed;z-index:180;min-width:212px;width:min(265px,calc(100vw - 22px));background:#202a29;border:1px solid #43534d;border-radius:13px;padding:6px;box-shadow:0 20px 55px #000b;transform-origin:top right;animation:asp-pop .2s cubic-bezier(.2,.8,.2,1);color:#eaf4ee}
+.song-popover .pop-title{padding:9px 11px 10px;border-bottom:1px solid #ffffff17;margin:0 0 4px}
+.song-popover .pop-title strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song-popover .pop-title small{display:block;color:#90a99a;font-size:10px;margin-top:3px}
+.song-popover .pop-btn{width:100%;display:flex;align-items:center;gap:11px;padding:10px 10px;border-radius:8px;color:#d7e5dc;background:transparent;text-align:left;font-size:12px}
+.song-popover .pop-btn:hover,.song-popover .pop-btn:focus-visible{background:#ffffff12;color:#fff}
+.song-popover .pop-btn svg{width:17px;height:17px;color:#a1c3b1}
+.song-popover .pop-divider{height:1px;background:#ffffff18;margin:5px 3px}
+.song-popover .pop-subtitle{font-size:10px;color:#99b4a5;padding:6px 10px}
+.song-popover .pop-offset{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 10px 10px}
+.song-popover .pop-offset button{width:26px;height:25px;border:1px solid #ffffff24;border-radius:7px;font-size:16px}
+.song-popover .pop-offset span{font:11px ui-monospace,monospace;color:#bdebcf}
+.song-popover .pop-scroll{max-height:34vh;overflow-y:auto}
+.song-popover .pop-empty{font-size:11px;color:#95a59c;padding:10px}
+.aurelis-reduce-motion *, .aurelis-reduce-motion *:before, .aurelis-reduce-motion *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+.aurelis-compact .music-card{padding:6px}.aurelis-compact .album-grid{gap:8px}.aurelis-compact .track-row{padding-top:5px;padding-bottom:5px}
+.aurelis-no-blur .fp-backdrop img{filter:none!important;opacity:.22!important}
+@keyframes asp-enter{from{opacity:0;transform:translateY(13px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes asp-fade{from{opacity:0}to{opacity:1}}
+@keyframes asp-pop{from{opacity:0;transform:translateY(-6px) scale(.96)}to{opacity:1;transform:none}}
+@media(max-width:650px){
+ .asp-overlay{padding:0;place-items:end center}
+ .asp-panel{width:100%;height:min(750px,88dvh);max-height:88dvh;min-height:0;display:flex;flex-direction:column;border-radius:20px 20px 0 0;border-bottom:0}
+ .asp-sidebar{padding:14px 14px 0;background:#151b1b;border-right:0;border-bottom:1px solid #ffffff16;gap:9px}
+ .asp-sidebar h2{font-size:17px;padding:0 6px;margin:0}
+ .asp-sidebar p,.asp-side-bottom{display:none}
+ .asp-nav{flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:11px;scrollbar-width:none}
+ .asp-nav button{width:auto;white-space:nowrap;font-size:11px;padding:10px 12px;gap:7px}
+ .asp-nav button svg{width:15px;height:15px}
+ .asp-header{padding:20px 22px 16px}
+ .asp-header h3{font-size:20px}
+ .asp-scroll{padding:6px 22px 30px}
+ .asp-setting{gap:10px}
+ .asp-control input[type=range]{width:90px}
+ .asp-control select{max-width:120px}
+}
+@media(prefers-reduced-motion:reduce){.asp-overlay,.asp-panel,.song-popover{animation:none}}
+
+/* Ensure the action button sits above the artwork click surface. */
+.music-card>.card-more{z-index:4}
+.music-card .card-play{z-index:3}
+
+/* Keep anchored actions within short Android landscape viewports. */
+.song-popover{max-height:calc(100dvh - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}

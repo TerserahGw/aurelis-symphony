@@ -1,6 +1,6 @@
 // Lightweight lyrics integrations for the Node runtime.
 export const LYRIC_SOURCES = Object.freeze([
-  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: false, availability: 'best-effort' },
+  { id: 'lrclib', name: 'LRCLIB', synced: true, wordLevel: 'when-enhanced-lrc-is-available', availability: 'best-effort' },
   { id: 'lyricsovh', name: 'lyrics.ovh', synced: false, wordLevel: false, availability: 'best-effort' }
 ]);
 const cache = new Map();
@@ -19,20 +19,48 @@ function seconds(token) {
   const time = Number(parts[0]) * 60 + Number(parts[1]);
   return Number.isFinite(time) ? time : null;
 }
+// Enhanced LRC uses <mm:ss.xx>word markers after an ordinary [line timestamp].
+// Keep word boundaries exact; never synthesize word timestamps when absent.
 export function parseLrc(value) {
-  const lines = [];
-  for (const raw of clean(value).split(/\r?\n/)) {
-    const stamps = [...raw.matchAll(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g)];
-    if (!stamps.length) continue;
-    const lyric = raw.replace(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g, '').trim();
-    if (!lyric) continue;
-    for (const stamp of stamps) {
-      const time = seconds(stamp[1].replace(',', '.'));
-      if (time !== null) lines.push({ time, endTime: null, text: lyric, translation: '', words: [] });
+  const lines=[];
+  for(const raw of clean(value).split(/\r?\n/)) {
+    const lineTags=[...raw.matchAll(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g)];
+    if(!lineTags.length)continue;
+    const body=raw.replace(/\[(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)\]/g,'');
+    const markers=[...body.matchAll(/<(\d{1,3}:\d{2}(?:[.,]\d{1,3})?)>/g)];
+    const text=body.replace(/<\d{1,3}:\d{2}(?:[.,]\d{1,3})?>/g,'').trim();
+    if(!text)continue;
+    for(const tag of lineTags){
+      const time=seconds(tag[1].replace(',','.'));
+      if(time===null)continue;
+      const words=[];
+      if(markers.length) {
+        const prefix=body.slice(0,markers[0].index);
+        if(prefix.trim())words.push({start:time,end:null,text:prefix});
+        for(let i=0;i<markers.length;i++){
+          const marker=markers[i], next=markers[i+1];
+          const start=seconds(marker[1].replace(',','.'));
+          if(start===null)continue;
+          const piece=body.slice(marker.index+marker[0].length,next?.index??body.length);
+          if(!piece)continue;
+          const nextStart=next?seconds(next[1].replace(',','.')):null;
+          words.push({start:Math.max(time,start),end:nextStart!==null?nextStart:null,text:piece});
+        }
+      }
+      lines.push({time,endTime:null,text,translation:'',words});
     }
   }
-  lines.sort((a, b) => a.time - b.time);
-  for (let i = 0; i < lines.length - 1; i++) lines[i].endTime = lines[i + 1].time;
+  lines.sort((a,b)=>a.time-b.time);
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];line.endTime=lines[i+1]?.time??null;
+    for(let j=0;j<line.words.length;j++){
+      const word=line.words[j];
+      const next=line.words[j+1];
+      word.end=Math.max(word.start,Number(next?.start??line.endTime??(word.start+.45)));
+      // Avoid karaoke gradient filling earlier than the word begins.
+      if(!Number.isFinite(word.end))word.end=word.start+.45;
+    }
+  }
   return lines;
 }
 function score(expected, actual) {

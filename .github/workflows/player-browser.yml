@@ -5,6 +5,12 @@ on:
     paths:
       - src/main/resources/web/assets/full-player.js
       - src/main/resources/web/assets/full-player.css
+      - src/main/resources/web/assets/v21.js
+      - src/main/resources/web/assets/preferences.js
+      - src/main/resources/web/assets/preferences.css
+      - src/main/resources/web/assets/lyrics-v23.css
+      - src/main/resources/web/assets/docs.js
+      - src/main/resources/web/docs/api.html
       - src/main/resources/web/index.html
       - .github/workflows/player-browser.yml
 permissions:
@@ -54,7 +60,36 @@ jobs:
             await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'.png'});
             await page.locator('#fpClose').click();
             await page.locator('#fullPlayer').waitFor({state:'hidden',timeout:4500});
-            console.log((mobile?'Mobile':'Desktop')+' player open/queue/autoplay/romanize/translate/close OK');
+            await page.locator('#settingsButton').click();
+            await page.locator('#aurelisPreferences').waitFor({state:'visible',timeout:5000});
+            await page.locator('[data-tab=lyrics]').click();
+            await page.locator('[data-range=lyricOffset]').evaluate(el=>{el.value='0.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
+            if(!(await page.locator('[data-output=lyricOffset]').textContent()).includes('0.5'))throw new Error('Lyric offset setting did not apply');
+            await page.locator('[data-tab=data]').click();
+            if(!await page.locator('[data-action=docs]').isVisible())throw new Error('Docs button missing');
+            await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'-settings.png'});
+            await page.locator('#aspClose').click();
+            await page.locator('.music-card .card-more').first().click({timeout:10000});
+            await page.locator('#trackPopover').waitFor({state:'visible',timeout:4000});
+            if(await page.locator('#trackPopover').evaluate(el=>el.getBoundingClientRect().width)>285)throw new Error('Song popover too large');
+            await page.locator('#trackPopover [data-menu=offset-plus]').click();
+            if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))throw new Error('Song offset failed');
+            await page.locator('#trackPopover [data-menu=offset-reset]').click();
+            await page.locator('#trackPopover [data-menu=play]').click();
+            await page.goto('http://127.0.0.1:18080/docs/api',{waitUntil:'domcontentloaded'});
+            await page.locator('.docs-endpoint').first().waitFor();
+            await page.locator('[data-try=health]').scrollIntoViewIfNeeded();
+            await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'-docs.png'});
+            console.log('Docs geometry', await page.evaluate(()=>{
+              const button=document.querySelector('[data-try=health]');
+              const rect=button.getBoundingClientRect(), hit=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);
+              return {button:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},
+                hit:hit?.outerHTML?.slice(0,140),side:document.querySelector('.docs-side')?.getBoundingClientRect().width,
+                viewport:innerWidth};
+            }));
+            await page.locator('[data-try=health]').click({timeout:10000});
+            await page.locator('#result-health').waitFor({state:'visible',timeout:5000});
+            console.log((mobile?'Mobile':'Desktop')+' player/settings/popover/API docs OK');
             await context.close();
           }
           await scenario(393,852,true);
@@ -66,6 +101,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aurelis-2-2-player-screenshots
+          name: aurelis-2-3-interface-screenshots
           path: /tmp/aurelis-*.png
           if-no-files-found: ignore
