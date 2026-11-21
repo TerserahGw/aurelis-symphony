@@ -1,0 +1,69 @@
+name: Live Aurelis website smoke test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/live-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test production endpoints and small audio ranges
+        env:
+          TARGET: https://aurelis-symphony.go.altare.global
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, time
+          base=os.environ['TARGET'].rstrip('/')
+          checks=[
+            ('health','/api/v1/health'),
+            ('config','/api/v1/config'),
+            ('direct-status','/api/v2/status'),
+            ('homepage','/'),
+            ('v21-script','/assets/v21.js?v=2.1.0'),
+            ('v21-css','/assets/v21.css?v=2.1.0'),
+            ('catalog','/api/v1/catalog'),
+            ('search','/api/v1/search?q=Another%20Love&provider=youtube&limit=3'),
+            ('direct-audio','/api/v2/audio/MwpMEbgC7DA'),
+            ('demo-range','/demo/aether-bloom.mp3')
+          ]
+          fail=0
+          for name,path in checks:
+            headers={'User-Agent':'Aurelis-Live-Smoke/1.0','Accept':'application/json,text/html,audio/*'}
+            if name.endswith('range') or name=='direct-audio':
+              headers['Range']='bytes=0-1023'
+            req=urllib.request.Request(base+path,headers=headers)
+            started=time.monotonic()
+            try:
+              with urllib.request.urlopen(req,timeout=22) as r:
+                status=r.status
+                ctype=r.headers.get('Content-Type','')
+                body=r.read(2048)
+                print(f'[{name}] HTTP {status} in {time.monotonic()-started:.1f}s; type={ctype}; bytes-read={len(body)}')
+                if name in ('health','config','direct-status','catalog','search','direct-audio'):
+                  if 'json' in ctype:
+                    try:
+                      data=json.loads(body.decode('utf-8','replace'))
+                      if name=='health': print('  version:',data.get('version'),'runtime:',data.get('runtime'))
+                      elif name=='direct-status': print('  stream:',json.dumps(data.get('stream',{}),ensure_ascii=False)[:400])
+                      elif name=='search': print('  tracks:',len(data.get('tracks',[])),'error:',data.get('error'))
+                      elif name=='catalog': print('  tracks:',len(data.get('tracks',[])))
+                      else: print('  result:',json.dumps(data,ensure_ascii=False)[:400])
+                    except Exception as e: print('  JSON parse issue:',str(e))
+                if name=='homepage': print('  v21 assets:',b'/assets/v21.js' in body or b'/assets/v21.css' in body)
+                if name=='demo-range': print('  range:',r.headers.get('Content-Range'))
+                if name=='direct-audio': print('  range:',r.headers.get('Content-Range'))
+            except urllib.error.HTTPError as e:
+              body=e.read(1000).decode('utf-8','replace')
+              print(f'[{name}] HTTP {e.code} in {time.monotonic()-started:.1f}s; body={body[:400]}')
+              fail+=1
+            except Exception as e:
+              print(f'[{name}] NETWORK ERROR in {time.monotonic()-started:.1f}s: {type(e).__name__}: {e}')
+              fail+=1
+          print('HTTP/network failures:',fail)
+          PY
