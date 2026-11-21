@@ -60,3 +60,11 @@
   .fp-floating-tools{bottom:2px}
 }
 @media(prefers-reduced-motion:reduce){.fp-lyric{transition:none!important;filter:none!important}}
+
+/* Lyric utilities belong next to attribution, never on top of lyric lines. */
+.fp-floating-tools{top:4px!important;bottom:auto!important;right:8px!important}
+.fp-translation-credit{padding-right:112px!important;min-height:43px}
+@media(max-width:480px){
+  .fp-floating-tools{top:2px!important}
+  .fp-translation-credit{padding-right:103px!important}
+}
