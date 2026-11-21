@@ -9,8 +9,9 @@ import { createRadio } from './server/recommend.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
+import { romanizeBatch } from './server/romanize.mjs';
 
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -109,6 +110,31 @@ async function api(req, res, url, head) {
     discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus(), translation: {provider:'MyMemory',target:'id',optIn:true}
   }, head);
   if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint, q);
+  // First-party playback resolver returns a relative streaming URL, not raw
+  // signed googlevideo URLs. No third-party URL proxy or guarantee of uptime.
+  if (endpoint.startsWith('/api/v2/playback/')) {
+    const id=endpoint.slice('/api/v2/playback/'.length);
+    if(!/^[A-Za-z0-9_-]{1,80}$/.test(id))return apiError(res,400,'invalid_id','Invalid track identifier.',head);
+    const local=catalog.find(t=>t.id===id && typeof t.audio==='string' && /^\/demo\/[\w.-]+\.mp3$/.test(t.audio));
+    if(local)return response(res,200,{ok:true,id,type:'original',available:true,
+      streamUrl:local.audio,probeUrl:null,mime:'audio/mpeg',range:true,
+      notice:'Bundled Aurelis original, served with HTTP Range support.'},head);
+    const videoId=(id.startsWith('yt-')?id.slice(3):id);
+    if(!/^[A-Za-z0-9_-]{11}$/.test(videoId))
+      return apiError(res,404,'track_not_found','Unknown catalog or YouTube ID.',head);
+    return response(res,200,{ok:true,id:'yt-'+videoId,type:'youtube',available:null,
+      experimental:true,streamUrl:'/api/v2/audio/'+videoId,
+      probeUrl:'/api/v2/audio/'+videoId+'?probe=1',range:true,
+      notice:'Resolver only; request probeUrl to test current availability. Source may return HTTP 424 due to upstream restrictions.'},head);
+  }
+  if (endpoint === '/api/v2/romanize') {
+    if(req.method!=='POST')return apiError(res,405,'method_not_allowed','Use POST.',head);
+    if(rateLimited(req))return apiError(res,429,'rate_limited','Too many romanization requests.',head);
+    let input;
+    try{input=await readJson(req,24000);}catch(e){e.status=400;throw e;}
+    const out=await romanizeBatch(input);
+    return response(res,out.ok?200:400,out,head);
+  }
   if (endpoint === '/api/v2/translate') {
     if (req.method !== 'POST') return apiError(res,405,'method_not_allowed','Use POST.',head);
     if (rateLimited(req)) return apiError(res,429,'rate_limited','Terlalu banyak permintaan terjemahan.',head);
@@ -242,12 +268,12 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' blob:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'");
-  if (CORS) { res.setHeader('Access-Control-Allow-Origin', CORS); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS'); }
+  if (CORS) { res.setHeader('Access-Control-Allow-Origin', CORS); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS'); }
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   let url;
   try { url = new URL(req.url, 'http://localhost'); } catch { return apiError(res, 400, 'bad_url', 'Invalid URL.', head); }
   const isApi = url.pathname.startsWith('/api/') || url.pathname === '/health';
-  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT') && !(url.pathname === '/api/v2/translate' && req.method === 'POST'))
+  if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT') && !(url.pathname === '/api/v2/translate' && req.method === 'POST') && !(url.pathname === '/api/v2/romanize' && req.method === 'POST'))
     return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   if (!isApi && !['GET', 'HEAD'].includes(req.method)) return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);
   try {

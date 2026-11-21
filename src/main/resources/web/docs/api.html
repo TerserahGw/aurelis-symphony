@@ -3,42 +3,105 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#101716">
-<meta name="description" content="Dokumentasi REST API Aurelis Symphony: pencarian YouTube, rekomendasi, lirik, status, dan pemutaran.">
-<title>API Reference · Aurelis Symphony</title>
+<meta name="theme-color" content="#101b1b">
+<meta name="description" content="Aurelis Symphony Developer Hub — tutorial API, panduan audio stream, romanisasi lirik dan pengujian REST interaktif.">
+<title>Developer Hub · Aurelis Symphony API</title>
 <link rel="icon" href="/assets/aurelis.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/docs.css?v=2.6.0">
+<link rel="stylesheet" href="/assets/docs.css?v=2.7.0">
+<link rel="stylesheet" href="/assets/docs-v27.css?v=2.7.0">
 </head>
 <body>
 <div class="docs-shell">
   <aside class="docs-side">
-    <a class="docs-brand" href="/" aria-label="Kembali ke Aurelis"><span class="docs-brand-icon">✦</span><span><strong>Aurelis</strong><small>DEVELOPER DOCS</small></span></a>
-    <div class="docs-side-label">REFERENCE</div>
-    <nav id="docsNav" aria-label="Endpoint REST API"></nav>
-    <div class="docs-side-bottom"><span class="status-led"></span><span>REST · JSON · v2.6.0</span></div>
+    <a class="docs-brand" href="/" aria-label="Kembali ke Aurelis Player"><span class="docs-brand-icon">✦</span><span><strong>Aurelis</strong><small>DEVELOPER HUB</small></span></a>
+    <div class="docs-side-label">MULAI DI SINI</div>
+    <div class="docs-quick-links">
+      <a href="#intro">Mulai menggunakan API</a>
+      <a href="#streamGuide">Cara mengambil audio stream</a>
+      <a href="#endpointList">Semua endpoint</a>
+      <a href="#limits">Batasan & keamanan</a>
+    </div>
+    <div class="docs-side-label docs-reference-label">API REFERENCE</div>
+    <nav id="docsNav" aria-label="Daftar endpoint REST API"></nav>
+    <div class="docs-side-bottom"><span class="status-led"></span><span>REST · JSON / AUDIO · v2.7.0</span></div>
   </aside>
   <main class="docs-main">
-    <div class="docs-topline"><a href="/">← Kembali ke Player</a><span>AURELIS / DEVELOPERS</span></div>
+    <div class="docs-topline"><a href="/">← Kembali ke Player</a><span>DEVELOPER HUB / 2.7</span></div>
     <header class="docs-hero">
-      <div class="docs-overline">REST API REFERENCE / VERSION 2.4</div>
-      <h1>Build with music.</h1>
-      <p>Temukan musik, atur rekomendasi, dan sinkronkan lirik. Satu API yang bisa kamu panggil dari website, bot, atau aplikasi Node.js.</p>
-      <div class="docs-base"><span>BASE URL</span><code>https://aurelis-symphony.go.altare.global</code><button id="copyBase" aria-label="Salin base URL">Salin</button></div>
-      <div class="docs-hints"><span>GET / POST</span><span>JSON</span><span>Tanpa kunci API untuk endpoint publik</span></div>
+      <div class="docs-hero-aurora" aria-hidden="true"></div>
+      <div class="docs-overline">AURELIS SYMPHONY / DEVELOPER EXPERIENCE</div>
+      <h1>Make music<br><em>work together.</em></h1>
+      <p>Gunakan REST API untuk pencarian lagu, rekomendasi, romanisasi dan lirik. Pelajari cara memperoleh URL audio, mengetes ketersediaan stream, lalu memasangnya dalam pemutar aplikasi.</p>
+      <div class="docs-base"><span>BASE URL</span><code id="docsBaseUrl">https://aurelis-symphony.go.altare.global</code><button id="copyBase" aria-label="Salin base URL">Salin URL</button></div>
+      <div class="docs-hints"><span>Tanpa API key untuk endpoint publik</span><span>JSON + HTML5 Audio</span><span>HTTP Range</span><span>REST 2.7</span></div>
+      <div class="docs-hero-actions">
+        <a href="#streamGuide">Panduan audio stream</a><a href="#endpointList">Jelajahi API</a>
+      </div>
     </header>
-    <div class="docs-alert"><strong>Catatan pemutaran</strong><p>API YouTube.js menyediakan hasil pencarian dan metadata, bukan jaminan audio. Streaming langsung melalui dua modul Node.js bersifat eksperimen, dapat dibatasi oleh YouTube, dan bukan integrasi playback yang disahkan YouTube.</p></div>
     <section class="docs-intro" id="intro">
-      <div class="docs-overline">GETTING STARTED</div>
-      <h2>Contoh pertama</h2>
-      <p>Permintaan ini mencari lagu berjudul Another Love. Gunakan query URL encoding dan periksa field <code>tracks</code> pada respons.</p>
-      <div class="docs-code"><div class="code-toolbar"><span>TERMINAL</span><button data-copy="curl -s 'https://aurelis-symphony.go.altare.global/api/v1/search?q=Another%20Love&amp;provider=youtube&amp;limit=5'">Salin</button></div><pre><code>curl -s 'https://aurelis-symphony.go.altare.global/api/v1/search?q=Another%20Love&amp;provider=youtube&amp;limit=5'</code></pre></div>
+      <div class="docs-overline">QUICK START / 01</div>
+      <h2>Mulai dalam satu permintaan</h2>
+      <p>Pakai <code>GET /api/v1/catalog</code> untuk lagu demo asli Aurelis yang dapat diuji secara lokal tanpa pembatasan dari YouTube, atau gunakan pencarian metadata YouTube untuk katalog yang lebih luas.</p>
+      <div class="docs-code"><div class="code-toolbar"><span>TERMINAL · DAPAT DICOBA</span><button data-copy="curl -s 'https://aurelis-symphony.go.altare.global/api/v1/catalog'">Salin</button></div><pre><code>curl -s 'https://aurelis-symphony.go.altare.global/api/v1/catalog'</code></pre></div>
+      <div class="docs-start-options">
+        <a href="#catalog"><strong>1 · Coba demo Aurelis</strong><small>MP3 langsung; cocok untuk tes audio</small></a>
+        <a href="#search"><strong>2 · Cari lagu YouTube</strong><small>Metadata saja, audio belum pasti tersedia</small></a>
+        <a href="#romanize"><strong>3 · Romanisasi lirik</strong><small>Jepang, Korea dan Mandarin</small></a>
+      </div>
     </section>
-    <section id="endpointList"><div class="docs-overline">ENDPOINTS</div><h2>Daftar endpoint</h2><p class="docs-muted">Coba permintaan GET langsung dari halaman ini. Endpoint POST ditampilkan dengan contoh body.</p></section>
-    <section class="docs-foot" id="limits"><div class="docs-overline">BATASAN</div><h2>Yang perlu diketahui</h2><p>Pencarian dan metadata bersumber dari YouTube (melalui modul tidak resmi). Lirik berasal dari LRCLIB atau lyrics.ovh jika tersedia. Terjemahan mengirimkan teks yang kamu pilih ke MyMemory. Playlist dan riwayat secara default disimpan di browser, bukan server. Beberapa API menerapkan rate limit dan dapat mengembalikan HTTP 429/503/424.</p><a class="docs-foot-link" href="https://github.com/TerserahGw/aurelis-symphony" target="_blank" rel="noopener noreferrer">Repository GitHub</a></section>
-    <footer>AURELIS SYMPHONY · API REFERENCE 2.6.0 <span>Music, documented.</span></footer>
+    <section class="docs-stream-guide" id="streamGuide">
+      <div class="docs-overline">PLAYBACK GUIDE / 02</div>
+      <h2>Cara mengambil audio stream</h2>
+      <p>API menyediakan <strong>URL stream milik Aurelis</strong>, bukan URL Googlevideo permanen. Untuk YouTube, akses dipengaruhi pembatasan sumber, IP hosting, codec, dan dukungan HTTP Range.</p>
+      <div class="docs-stream-steps">
+        <div><span>01</span><strong>Temukan ID lagu</strong><small>Ambil <code>videoId</code> dari <code>/api/v1/search</code>, atau gunakan ID demo seperti <code>demo-aether</code>.</small></div>
+        <div><span>02</span><strong>Resolve URL stream</strong><small>Panggil <code>/api/v2/playback/:id</code>; respons JSON menyediakan <code>streamUrl</code> dan <code>probeUrl</code>.</small></div>
+        <div><span>03</span><strong>Probe jika YouTube</strong><small>Uji <code>probeUrl</code>. HTTP 200 + <code>ok:true</code> berarti byte pertama tersedia; HTTP 424 berarti sumber gagal.</small></div>
+        <div><span>04</span><strong>Putar via audio HTML5</strong><small>Pasang <code>streamUrl</code> pada elemen <code>&lt;audio&gt;</code>; browser mengatur Range/seek otomatis.</small></div>
+      </div>
+      <div class="docs-stream-workbench">
+        <div class="docs-workbench-head">
+          <div><span class="docs-overline">INTERACTIVE PLAYGROUND</span><h3>Uji stream langsung</h3><p>Mulai dari demo yang terjamin tersedia di repo, atau tempel ID video YouTube.</p></div>
+          <span class="docs-live-dot"><i></i> HTTP</span>
+        </div>
+        <form id="streamWorkbench" class="docs-stream-form">
+          <label for="streamTrackInput">Track ID atau URL YouTube</label>
+          <div class="docs-stream-control"><input id="streamTrackInput" value="demo-aether" placeholder="demo-aether / MwpMEbgC7DA / URL YouTube" autocomplete="off" spellcheck="false" maxlength="500">
+            <button type="submit">Dapatkan URL</button></div>
+        </form>
+        <div class="docs-stream-actions">
+          <button type="button" id="streamProbe" disabled>Uji ketersediaan</button>
+          <button type="button" id="streamListen" disabled>Putar stream</button>
+          <button type="button" id="streamCopy" disabled>Salin URL stream</button>
+        </div>
+        <div class="docs-stream-status" id="streamStatus" role="status">Masukkan ID lagu, lalu pilih “Dapatkan URL”.</div>
+        <pre class="docs-stream-result" id="streamResult" aria-label="Respons playback resolver">GET /api/v2/playback/demo-aether</pre>
+        <audio id="streamPreview" controls preload="none" hidden></audio>
+        <p class="docs-stream-caveat">Catatan: probe sukses hanya memastikan respons awal, <em>bukan</em> jaminan bahwa seluruh lagu akan selesai diputar. Jangan menggunakan URL upstream hasil ekstraksi sebagai tautan permanen.</p>
+      </div>
+      <div class="docs-code"><div class="code-toolbar"><span>JAVASCRIPT · CONTOH IMPLEMENTASI</span><button data-copy="const track = await (await fetch('/api/v2/playback/demo-aether')).json();&#10;const player = document.querySelector('audio');&#10;player.src = track.streamUrl;&#10;await player.play();">Salin</button></div><pre><code>const track = await (await fetch('/api/v2/playback/demo-aether')).json();
+const player = document.querySelector('audio');
+player.src = track.streamUrl;
+await player.play();</code></pre></div>
+    </section>
+    <div class="docs-alert"><strong>Streaming YouTube tidak selalu tersedia</strong><p><code>GET /api/v2/audio/:videoId</code> sudah mendukung relay Range ketika upstream mengizinkan. Jika YouTube meminta login, CAPTCHA, atau menolak IP server, API dapat mengembalikan HTTP 424. Aurelis tidak melewati DRM atau pemeriksaan anti-bot.</p></div>
+    <section id="endpointList">
+      <div class="docs-overline">API EXPLORER / 03</div>
+      <h2>Semua endpoint</h2>
+      <p class="docs-muted">Cari endpoint, ubah query URL dan coba langsung. Contoh POST memiliki body JSON yang bisa diedit sebelum dikirim.</p>
+      <label class="docs-explorer-filter"><span>Filter endpoint</span><input type="search" id="docsFilter" placeholder="Cari: audio, search, lirik, playback..." autocomplete="off"></label>
+    </section>
+    <section class="docs-foot" id="limits">
+      <div class="docs-overline">REFERENCE / 04</div><h2>Batasan dan praktik baik</h2>
+      <p>Gunakan URL relatif hasil resolver, periksa kode HTTP, batasi retry pada 429/424, dan gunakan Range hanya untuk seek yang didukung. Katalog demo menyediakan MP3 lokal; pencarian YouTube hanya menemukan metadata. Lirik tersedia berdasarkan lisensi dan provider; romanisasi kamus tidak selalu tepat untuk nama khusus. Riwayat serta playlist disimpan di browser kecuali fitur cloud diaktifkan.</p>
+      <a class="docs-foot-link" href="https://github.com/TerserahGw/aurelis-symphony" target="_blank" rel="noopener noreferrer">Sumber kode GitHub</a>
+      <a class="docs-foot-link" href="/api/v1/openapi.json" target="_blank" rel="noopener noreferrer">Spesifikasi OpenAPI 2.7.0</a>
+    </section>
+    <footer>AURELIS SYMPHONY · DEVELOPER HUB 2.7.0 <span>Built for actual listening.</span></footer>
   </main>
 </div>
 <div id="docsToast" role="status" class="docs-toast" hidden>Tersalin</div>
-<script src="/assets/docs.js?v=2.6.0" defer></script>
+<script src="/assets/docs.js?v=2.7.0" defer></script>
+<script src="/assets/docs-v27.js?v=2.7.0" defer></script>
 </body>
 </html>

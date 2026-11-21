@@ -301,6 +301,61 @@ function romanize(value) {
   result=hangulRomaji(result);
   return result!==txt?result:'';
 }
+// Async dictionary romanization is requested once per track + language, not in the
+// animation frame. The existing lightweight kana/Hangul code is the offline
+// fallback; unknown Japanese Kanji are NEVER treated as Mandarin Pinyin.
+const romanResults=new Map(),romanPending=new Set();
+let romanLanguageApplied=String(prefs().romanLanguage||'auto');
+function lyricRomanKey(s){
+  return JSON.stringify([s.current?.id,prefs().romanLanguage||'auto',
+    (s.lyrics?.lines||[]).map(l=>l.text)]);
+}
+function romanLanguageFor(lines){
+  const selected=prefs().romanLanguage||'auto';
+  if(selected!=='auto')return selected;
+  const sample=lines.map(l=>l.text).join('');
+  if(/[\uac00-\ud7af]/u.test(sample))return 'ko';
+  if(/[\u3040-\u30ff]/u.test(sample))return 'ja';
+  if(/[\u3400-\u9fff]/u.test(sample))return 'zh';
+  return 'auto';
+}
+async function requestRomanization(s){
+  if(!romanEnabled||!s.current||!s.lyrics?.lines?.length)return;
+  const key=lyricRomanKey(s);
+  if(romanResults.has(key)||romanPending.has(key))return;
+  romanPending.add(key);
+  const texts=s.lyrics.lines.map(l=>String(l.text||'').slice(0,320));
+  const language=romanLanguageFor(s.lyrics.lines);
+  const mapped=[];
+  try{
+    for(let offset=0;offset<texts.length;offset+=50){
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),22000);
+      try{
+        const result=await fetch('/api/v2/romanize',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({texts:texts.slice(offset,offset+50),language}),
+          signal:controller.signal
+        });
+        const payload=await result.json();
+        if(!result.ok||!payload.ok||!Array.isArray(payload.lines))throw Error('romanize_unavailable');
+        for(const line of payload.lines)mapped.push(String(line?.text||''));
+      }finally{clearTimeout(timer);}
+    }
+    romanResults.set(key,mapped);
+  }catch(e){
+    // Mark the request resolved even if backend is busy, to avoid a request
+    // storm when users open/close the fullscreen player on mobile data.
+    romanResults.set(key,null);
+  }finally{
+    romanPending.delete(key);
+    if(romanResults.size>12)romanResults.delete(romanResults.keys().next().value);
+    if(opened&&romanEnabled&&tab==='lyrics'&&lyricRomanKey(snapshot())===key){
+      lastLyrics=null;renderLyrics(true);
+    }
+  }
+}
+
 function renderLyrics(force=false) {
   if(!opened||tab!=='lyrics')return;
   const s=snapshot(),l=s.lyrics;
@@ -311,11 +366,14 @@ function renderLyrics(force=false) {
   if(!l){pane.innerHTML='<p class="fp-lyrics-empty">Mencari lirik untuk lagu ini…</p>';return;}
   if(!l.lines?.length){pane.innerHTML='<p class="fp-lyrics-empty">Lirik belum tersedia untuk lagu ini.</p>';return;}
   const key=String(s.current.id),options=prefs(),hasWords=l.lines.some(line=>line.words?.length);
+  const romanKey=lyricRomanKey(s),romajiLines=romanResults.get(romanKey);
   pane.innerHTML='<div class="fp-translation-credit">Lirik oleh '+esc(l.sourceLabel||l.source||'Aurelis')+
     ' · '+(hasWords?'Timestamp per kata':l.synced?'Sinkron per baris':'Tanpa timestamp')+
     (translationEnabled?' · Terjemahan Indonesia (MyMemory)':'')+'</div>'+
     l.lines.map((line,i)=>{
-      const words=romanEnabled?romanize(line.text):'';
+      const serverRoman=Array.isArray(romajiLines)?romajiLines[i]:null;
+      const romanOutput=serverRoman||romanize(line.text);
+      const words=romanEnabled&&romanOutput!==line.text?romanOutput:'';
       const translated=translationEnabled?(translations.get(key+':'+i)||line.translation||''):'';
       let text;
       const timedWords=Array.isArray(line.words)?line.words.filter(w=>
@@ -340,6 +398,7 @@ function renderLyrics(force=false) {
   updateFocus(s);
   syncKaraokeFrame();
   if(translationEnabled)requestTranslations();
+  if(romanEnabled)requestRomanization(s);
 }
 async function requestTranslations() {
   const s=snapshot(), lines=s.lyrics?.lines;
@@ -441,7 +500,7 @@ $('fpRomanize').addEventListener('click',()=>{
   window.AurelisPreferences?.set('romanization',romanEnabled);
   $('fpRomanize').classList.toggle('selected',romanEnabled);
   lastLyrics=null;renderLyrics(true);
-  flash(romanEnabled?'Romanisasi Jepang / Korea aktif':'Romanisasi dimatikan');
+  flash(romanEnabled?'Romanisasi Jepang · Korea · Mandarin aktif':'Romanisasi dimatikan');
 });
 $('fpShuffle').addEventListener('click',()=>app()?.toggleShuffle());
 $('fpRepeat').addEventListener('click',()=>app()?.toggleRepeat());
@@ -497,8 +556,11 @@ document.addEventListener('keydown',event=>{if(opened&&event.key==='Escape')clos
 window.addEventListener('aurelis:preferences',()=>{
   const current=prefs();
   const newTranslation=!!current.translation,newRoman=!!current.romanization;
+  const nextRomanLanguage=String(current.romanLanguage||'auto');
   const rerender=newTranslation!==translationEnabled || newRoman!==romanEnabled
+    || nextRomanLanguage!==romanLanguageApplied
     || current.karaoke!==lastKaraokeEnabled || current.lineGlow!==lastLineGlowEnabled;
+  romanLanguageApplied=nextRomanLanguage;
   translationEnabled=newTranslation;romanEnabled=newRoman;
   lastKaraokeEnabled=current.karaoke;lastLineGlowEnabled=current.lineGlow;
   if(opened){refresh();if(rerender){lastLyrics=null;renderLyrics(true);}else updateFocus(snapshot());}

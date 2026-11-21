@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.6.0",
-    "description": "Aurelis Symphony 2.6: mobile island interface, metadata-driven personalized radio with client-provided liked/recent context, seven lyrics sources and experimental YouTube audio. No acoustic analysis."
+    "version": "2.7.0",
+    "description": "Aurelis Symphony 2.7: optional CJK lyric romanization, first-party playback URL resolution, HTTP Range audio relay for accessible streams, experimental YouTube audio, seven lyric sources, and ambient motion. No DRM/anti-bot circumvention."
   },
   "servers": [
     {
@@ -533,10 +533,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Unseekable audio stream"
+            "description": "Audio bytes when streaming without range (or JSON when ?probe=1)"
           },
           "206": {
-            "description": "Partial audio stream"
+            "description": "Partial binary audio response with Content-Range"
           },
           "403": {
             "description": "Streaming disabled"
@@ -544,7 +544,8 @@
           "424": {
             "description": "Experimental audio unavailable or blocked by upstream"
           }
-        }
+        },
+        "description": "GET :videoId returns binary audio with Range/206 if and only if the upstream permits it. GET ?probe=1 returns a short JSON byte preflight on success or HTTP 424 JSON diagnostic. YouTube playback is experimental and can fail at any time; no bypasses."
       }
     },
     "/api/v2/translate": {
@@ -587,6 +588,92 @@
           },
           "400": {
             "description": "Invalid input"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      }
+    },
+    "/api/v2/playback/{id}": {
+      "get": {
+        "summary": "Resolve track ID to an Aurelis audio stream URL (does not check YouTube playback)",
+        "description": "Bundled original tracks provide confirmed static MP3 paths; YouTube IDs return experimental internal streaming and probe URLs. This is a URL resolver, not an upstream availability guarantee.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "demo-aether or YouTube videoId or yt-videoId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Descriptor JSON with streamUrl and optional probeUrl"
+          },
+          "400": {
+            "description": "Invalid track ID"
+          },
+          "404": {
+            "description": "Unknown track"
+          }
+        }
+      }
+    },
+    "/api/v2/romanize": {
+      "post": {
+        "summary": "Romanize Japanese, Korean or Mandarin lyric lines",
+        "description": "Dictionary-based Japanese Kanji reading, Korean Revised Romanization or Mandarin Pinyin. Returns completeness per line. Best-effort for names and polyphonic characters.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "texts"
+                ],
+                "properties": {
+                  "texts": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 60,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 320
+                    }
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "ja",
+                      "ko",
+                      "zh"
+                    ],
+                    "default": "auto"
+                  }
+                }
+              },
+              "example": {
+                "texts": [
+                  "今日はいい天気",
+                  "音楽"
+                ],
+                "language": "ja"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "lines with romanized text and completeness flags"
+          },
+          "400": {
+            "description": "Validation failed"
           },
           "429": {
             "description": "Rate limited"

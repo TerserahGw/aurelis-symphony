@@ -4,7 +4,7 @@
 const defaults={
   lyricSize:31, lyricOffset:0, karaoke:true, reduceMotion:false,
   compactCards:false, artworkBlur:true, radioMode:'balanced',
-  romanization:true, translation:false
+  romanization:true, romanLanguage:'auto', translation:false
 };
 const $=id=>document.getElementById(id);
 const load=(key,fallback)=>{try{return JSON.parse(localStorage.getItem('aurelis:'+key))??fallback;}catch{return fallback;}};
@@ -134,9 +134,11 @@ function render(){
     html+=parts.slide('lyricSize','Ukuran teks lirik','Atur teks lirik fullscreen untuk layar Android.',Number(values.lyricSize),20,46,1,' px');
     html+=parts.sw('karaoke','Progres per kata','Gunakan timestamp kata asli jika sumber menyediakannya.',values.karaoke);
 
-    html+=parts.sw('romanization','Romanisasi','Tampilkan bacaan romaji/kata Korea dalam huruf Latin.',values.romanization);
+    html+=parts.sw('romanization','Romanisasi','Tampilkan ejaan Latin yang dikonversi dari aksara asli.',values.romanization);
+    html+=parts.sel('romanLanguage','Bahasa lirik','Auto mengenali aksara; paksa Jepang saat lagu hanya berisi Kanji.',values.romanLanguage,
+      [['auto','Otomatis'],['ja','Jepang · Romaji'],['ko','Korea · RR'],['zh','Mandarin · Pinyin']]);
     html+=parts.sw('translation','Terjemahan Indonesia','Kirim baris lirik ke MyMemory hanya jika dinyalakan.',values.translation);
-    html+='<p class="asp-notice">Hanya lirik dengan waktu kata asli yang mendapatkan efek karaoke. LRC bertimestamp per baris tidak akan ditampilkan dengan progres palsu.</p>';
+    html+='<p class="asp-notice">Romanisasi menggunakan kamus di server. Nama khusus dan Kanji dengan beberapa bacaan mungkin perlu koreksi. Karaoke hanya bergerak jika sumber punya timestamp per kata asli.</p>';
   }
   if(active==='visual'){
     html+=parts.heading('TAMPILAN');
@@ -165,6 +167,7 @@ function open(){
   shell.querySelector('#aspClose')?.focus();
 }
 function close(){
+  window.AurelisMotion?.settingsClosing?.(shell);
   shell.hidden=true;
   beforeFocus?.focus?.();
 }

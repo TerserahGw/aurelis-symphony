@@ -61,6 +61,7 @@ trackPopover.hidden=true;
 document.body.appendChild(trackPopover);
 let popoverAnchor=null;
 function closeSongPopover(){
+  if(!trackPopover.hidden)window.AurelisMotion?.menuClosing?.(trackPopover);
   if(popoverAnchor?.isConnected)popoverAnchor.setAttribute('aria-expanded','false');
   trackPopover.hidden=true;
   popoverAnchor=null;
@@ -285,7 +286,11 @@ function simpleView(kind) {
     (recent ? 'Putar kembali lagu yang pernah kamu dengar.' : 'Semua lagu yang bikin kamu jatuh cinta.') +
     '</p></div>' + rows(tracks);
 }
+let lastRenderedRoute='';
 function render() {
+  const routeKey=state.view+(state.view==='library'?':'+state.librarySection:'');
+  const changedRoute=lastRenderedRoute!==routeKey;
+  lastRenderedRoute=routeKey;
   const activeMain=['liked','recent','playlist','library'].includes(state.view)?'library':state.view;
   all('[data-nav]').forEach(n => {
     const active=n.dataset.nav===activeMain;
@@ -297,6 +302,7 @@ function render() {
     simpleView(state.view);
   $('view').innerHTML = page;
   renderSidePlaylists();
+  if(changedRoute)window.AurelisMotion?.pageChanged?.();
 }
 function renderSidePlaylists() {
   $('sidePlaylists').innerHTML = state.playlists.map(p =>
@@ -684,6 +690,8 @@ function showTrackMenu(t,anchor){
   const top=below+height<visibleHeight-12?below:Math.max(10,box.top-height-8);
   trackPopover.style.left=left+'px';
   trackPopover.style.top=Math.max(10,top)+'px';
+  trackPopover.style.setProperty('--aurelis-pop-origin',
+    Math.min(96,Math.max(4,((box.right-left)/width)*100))+'% '+(top>box.bottom?'0%':'100%'));
 }
 function newPlaylist() {
   $('playlistName').value = '';
