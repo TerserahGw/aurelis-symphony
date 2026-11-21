@@ -389,6 +389,7 @@ function renderQueue() {
 }
 function open() {
   if(opened)return;
+  window.AurelisIsland?.morph?.('open');
   opened=true;
   clearTimeout(closingTimer);
   box.hidden=false;
@@ -401,6 +402,7 @@ function open() {
 }
 function close() {
   if(!opened)return;
+  window.AurelisIsland?.morph?.('close');
   opened=false;
   stopKaraokeFrame();
   app()?.closeSongMenu?.();
