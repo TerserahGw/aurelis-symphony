@@ -61,8 +61,10 @@ trackPopover.hidden=true;
 document.body.appendChild(trackPopover);
 let popoverAnchor=null;
 function closeSongPopover(){
-  trackPopover.hidden=true;popoverAnchor=null;
-  if(state.menuTrack?.id) state.menuTrack=null;
+  if(popoverAnchor?.isConnected)popoverAnchor.setAttribute('aria-expanded','false');
+  trackPopover.hidden=true;
+  popoverAnchor=null;
+  state.menuTrack=null;
 }
 function normalizeSong(t){
   let name=String(t?.title||'').toLowerCase().normalize('NFKD');
@@ -361,6 +363,7 @@ async function play(t) {
   if (!t) return;
   if (!t.id) return;
   const seq = ++state.playSequence;
+  closeSongPopover();
   state.current=t;
   // A listening session can be repeated in order or reshuffled after it ends.
   if(!state.playedCycle.some(x=>x?.id===t.id)){
@@ -584,6 +587,8 @@ function showTrackMenu(t,anchor){
   if(!trackPopover.hidden&&popoverAnchor===anchor){closeSongPopover();return;}
   state.menuTrack=t;
   popoverAnchor=anchor;
+  anchor.setAttribute('aria-expanded','true');
+  anchor.setAttribute('aria-controls','trackPopover');
   if(validArt(t.artwork)){
     const art=String(t.artwork).replace(/["'()\\\s]/g,x=>encodeURIComponent(x));
     trackPopover.style.setProperty('--aurelis-ambient-art','url("'+art+'")');
@@ -620,10 +625,12 @@ function showTrackMenu(t,anchor){
   trackPopover.hidden=false;
   const box=anchor.getBoundingClientRect();
   const width=Math.min(265,window.innerWidth-22);
+  const visibleHeight=Math.max(220,window.visualViewport?.height||window.innerHeight);
+  trackPopover.style.maxHeight=Math.max(120,visibleHeight-24)+'px';
   const height=trackPopover.offsetHeight;
   const left=Math.min(window.innerWidth-width-11,Math.max(11,box.right-width));
   const below=box.bottom+8;
-  const top=below+height<window.innerHeight-12?below:Math.max(10,box.top-height-8);
+  const top=below+height<visibleHeight-12?below:Math.max(10,box.top-height-8);
   trackPopover.style.left=left+'px';
   trackPopover.style.top=Math.max(10,top)+'px';
 }
@@ -844,7 +851,7 @@ function setupEvents() {
   });
   document.addEventListener('pointerdown',e=>{
     if(!trackPopover.hidden&&!trackPopover.contains(e.target)
-       &&!e.target.closest('[data-action=menu]'))closeSongPopover();
+       &&!e.target.closest('[data-action=menu],#fpMore'))closeSongPopover();
   },true);
   // ScrollIntoView from the browser can fire after a click. Only dismiss on
   // intentional wheel/touch gestures, not layout or programmatic scrolling.
@@ -914,7 +921,8 @@ function snapshot() {
 }
 window.Aurelis = Object.freeze({
   snapshot,play,toggle,next,previous,
-  openSongMenu(anchor){if(state.current)showTrackMenu(state.current,anchor);},
+  openSongMenu(anchor){if(state.current && anchor?.isConnected)showTrackMenu(state.current,anchor);},
+  closeSongMenu:closeSongPopover,
   seek(sec){ if (Number.isFinite(sec) && audio.seekable.length) audio.currentTime=Math.max(0,Math.min(sec,currentDuration())); },
   setVolume(value){ audio.volume=Math.max(0,Math.min(1,Number(value)||0)); $('volume').value=String(Math.round(audio.volume*100)); store('volume',audio.volume);emit('player'); },
   toggleLike(){like(state.current);},
