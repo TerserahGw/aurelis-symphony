@@ -50,6 +50,42 @@ const state = {
   menuTrack: null, initial: true
 };
 const TRACK_LIMIT = 240;
+const trackPopover=document.createElement('div');
+trackPopover.id='trackPopover';
+trackPopover.className='song-popover';
+trackPopover.setAttribute('role','menu');
+trackPopover.setAttribute('aria-label','Opsi lagu');
+trackPopover.hidden=true;
+document.body.appendChild(trackPopover);
+let popoverAnchor=null;
+function closeSongPopover(){
+  trackPopover.hidden=true;popoverAnchor=null;
+  if(state.menuTrack?.id) state.menuTrack=null;
+}
+function normalizeSong(t){
+  let name=String(t?.title||'').toLowerCase().normalize('NFKD');
+  const artist=String(t?.artist||'').toLowerCase().replace(/ - topic$/,'').trim();
+  if(artist&&name.startsWith(artist+' - ')) name=name.slice(artist.length+3);
+  return name.replace(/\([^)]*\)|\[[^\]]*\]/g,'')
+    .replace(/\b(official|lyrics?|audio|video|remix|live|acoustic|cover|version|4k|music|visualizer)\b/g,'')
+    .replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+/g,' ').trim();
+}
+function sameRecording(a,b){
+  if(!a||!b)return false;
+  return a.id===b.id || !!normalizeSong(a)&&normalizeSong(a)===normalizeSong(b);
+}
+function uniqueRadio(items,forbidden=[],limit=8){
+  const result=[],artistCount=new Map();
+  for(const t of items||[]){
+    if(!t?.id || [...forbidden,...result].some(other=>sameRecording(t,other)))continue;
+    const artist=String(t.artist||'').toLowerCase().replace(/ - topic$/,'').trim();
+    if((artistCount.get(artist)||0)>=2)continue;
+    artistCount.set(artist,(artistCount.get(artist)||0)+1);
+    result.push(t);
+    if(result.length>=limit)break;
+  }
+  return result;
+}
 let searchTimer = null;
 let currentGenre = '';
 let playerInit = false;
@@ -263,8 +299,13 @@ async function loadHome() {
   state.loading = true;
   render();
   try {
-    const [catalogResult, homeResult] = await Promise.allSettled([
-      api('/api/v1/catalog'), api('/api/v2/home')
+    const recent=state.history.slice(0,6).map(trackById).filter(Boolean).map(t=>({id:t.id,title:t.title,artist:t.artist}));
+    const params=new URLSearchParams({
+      recent:JSON.stringify(recent),mode:window.AurelisPreferences?.values.radioMode||'balanced',
+      mood:currentGenre||'indie pop chill'
+    });
+    const [catalogResult,homeResult]=await Promise.allSettled([
+      api('/api/v1/catalog'),api('/api/v2/home?'+params)
     ]);
     if (catalogResult.status === 'fulfilled') state.catalog = catalogResult.value.tracks || [];
     if (homeResult.status === 'fulfilled') state.home = homeResult.value.tracks || [];
@@ -352,25 +393,32 @@ async function play(t) {
     } catch {}
   }
 }
-async function recommend(t, seq) {
-  const others = uniq([...state.results, ...state.home, ...state.catalog])
-    .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id));
-  state.suggestions = state.autoplay ? others.slice(0, 6) : [];
+async function recommend(t,seq) {
+  const recent=state.history.slice(0,8).map(trackById).filter(Boolean).filter(x=>x.id!==t.id);
+  const blocked=[t,...state.queue,...recent.slice(0,5)];
+  const others=[...state.results,...state.home,...state.catalog];
+  state.suggestions=state.autoplay?uniqueRadio(others,blocked,6):[];
   emit('queue');
-  if (!state.autoplay) return;
-  if (state.drawer === 'queue') renderPanel();
-  if (t.provider !== 'youtube' && !t.videoId && !String(t.id).startsWith('yt-')) return;
+  if (!state.autoplay)return;
+  if (state.drawer==='queue')renderPanel();
+  if(t.provider!=='youtube'&&!t.videoId&&!String(t.id).startsWith('yt-'))return;
   try {
-    const params = new URLSearchParams({ track: t.title || '', artist: t.artist || '', provider: 'youtube', exclude: t.id, limit: '15' });
-    const result = await api('/api/v1/recommendations?' + params);
-    if (seq !== state.playSequence || state.current?.id !== t.id) return;
-    state.suggestions = uniq(result.tracks || [])
-      .filter(x => x.id !== t.id && !state.queue.some(q => q.id === x.id)).slice(0, 8);
+    const params=new URLSearchParams({
+      track:t.title||'',artist:t.artist||'',album:t.album||'',
+      exclude:t.id,limit:'25',mode:window.AurelisPreferences?.values.radioMode||'balanced',
+      mood:currentGenre||'',recent:JSON.stringify(recent.slice(0,8).map(x=>({id:x.id,title:x.title,artist:x.artist}))),
+      queued:JSON.stringify(state.queue.slice(0,10).map(x=>({id:x.id,title:x.title,artist:x.artist})))
+    });
+    const result=await api('/api/v1/recommendations?'+params);
+    if(seq!==state.playSequence||state.current?.id!==t.id||!state.autoplay)return;
+    const recommended=uniqueRadio(result.tracks||[],blocked,8);
+    state.suggestions=recommended.length?recommended:state.suggestions;
     state.suggestions.forEach(remember);
-    save();
-    emit('queue');
-    if (state.drawer === 'queue') renderPanel();
-  } catch {}
+    save();emit('queue');
+    if(state.drawer==='queue')renderPanel();
+  }catch(e){
+    console.warn('Radio fallback used:',e.message);
+  }
 }
 function next() {
   const queued = state.queue.shift();
@@ -409,6 +457,7 @@ function like(t) {
 }
 function addQueue(t, first = false) {
   if (!t) return;
+  if(state.queue.some(x=>sameRecording(x,t))){toast('Lagu ini sudah ada di antrean.');return;}
   remember(t);
   if (first) state.queue.unshift(t); else state.queue.push(t);
   save();
@@ -501,7 +550,8 @@ function syncLyrics(force = false) {
   if (state.drawer !== 'lyrics' || !state.lyrics?.synced) return;
   const lines = state.lyrics.lines || [];
   let pos = -1;
-  for (let i = 0; i < lines.length; i++) if (Number.isFinite(lines[i].time) && lines[i].time <= currentTime() + .05) pos = i;
+  const lyricClock=currentTime()+(window.AurelisPreferences?.getOffset(state.current)||0);
+  for (let i = 0; i < lines.length; i++) if (Number.isFinite(lines[i].time) && lines[i].time <= lyricClock + .05) pos = i;
   if (pos !== state.lyricsIndex || force) {
     state.lyricsIndex = pos;
     const nodes = all('.lyrics-line');
@@ -513,26 +563,44 @@ function syncLyrics(force = false) {
       nodes[pos].scrollIntoView({ behavior:'smooth', block:'center' });
   }
 }
-function showTrackMenu(t) {
-  if (!t) return;
-  state.menuTrack = t;
-  $('menuTitle').textContent = t.title || 'Opsi lagu';
-  $('menuArtist').textContent = t.artist || '';
-  const liked = state.favorite.has(t.id);
-  const opts = [
-    ['play','Putar sekarang'], ['next','Putar berikutnya'], ['queue','Tambahkan ke antrean'],
-    ['like', liked ? 'Hapus dari lagu disukai' : 'Sukai lagu']
-  ];
-  let content = opts.map(([action,label]) => '<button class="menu-action" data-menu="' + action + '">' +
-    ic(action === 'like' ? 'heart' : action === 'queue' ? 'list' : 'play') + esc(label) + '</button>').join('');
-  if (state.playlists.length) {
-    content += '<p class="note">TAMBAHKAN KE PLAYLIST</p>' +
-      state.playlists.map(p => '<button class="menu-action" data-menu="playlist" data-playlist="' + esc(p.id) +
-        '">' + ic('plus') + esc(p.name) + '</button>').join('');
-  } else content += '<button class="menu-action" data-menu="new-playlist">' + ic('plus') + 'Buat playlist baru</button>';
-  if (t.url) content += '<button class="menu-action" data-menu="open-source">' + ic('external') + 'Buka sumber asli</button>';
-  $('songMenuOptions').innerHTML = content;
-  $('trackDialog').showModal();
+function showTrackMenu(t,anchor){
+  if(!t||!anchor)return;
+  if(!trackPopover.hidden&&popoverAnchor===anchor){closeSongPopover();return;}
+  state.menuTrack=t;
+  popoverAnchor=anchor;
+  const liked=state.favorite.has(t.id);
+  const offset=Number(read('songLyricOffsets',{})[t.id]||0);
+  const option=(action,label,icon)=>'<button role="menuitem" class="pop-btn" data-menu="'+action+
+    '">'+ic(icon)+'<span>'+esc(label)+'</span></button>';
+  let html='<div class="pop-title"><strong>'+esc(t.title||'Lagu')+'</strong><small>'+esc(t.artist||'')+'</small></div>';
+  html+=option('play','Putar sekarang','play');
+  html+=option('next','Putar berikutnya','skip-forward');
+  html+=option('queue','Tambahkan ke antrean','list');
+  html+=option('like',liked?'Hapus dari lagu disukai':'Sukai lagu','heart');
+  html+='<div class="pop-divider"></div><div class="pop-subtitle">OFFSET LIRIK · KHUSUS LAGU</div>'+
+    '<div class="pop-offset"><button data-menu="offset-minus" aria-label="Perlambat lirik">−</button>'+
+    '<span id="popOffsetValue">'+(offset>=0?'+':'')+offset.toFixed(2)+' s</span>'+
+    '<button data-menu="offset-plus" aria-label="Percepat lirik">+</button>'+
+    '<button data-menu="offset-reset" title="Reset offset" aria-label="Reset offset" style="font-size:11px">↺</button></div>';
+  html+='<div class="pop-divider"></div>';
+  if(state.playlists.length){
+    html+='<div class="pop-subtitle">TAMBAHKAN KE PLAYLIST</div><div class="pop-scroll">';
+    html+=state.playlists.map(p=>'<button role="menuitem" class="pop-btn" data-menu="playlist" data-playlist="'+
+      esc(p.id)+'">'+ic('plus')+'<span>'+esc(p.name)+'</span></button>').join('');
+    html+='</div>';
+  }
+  html+=option('new-playlist','Playlist baru','plus');
+  if(t.url)html+=option('open-source','Buka di YouTube','external');
+  trackPopover.innerHTML=html;
+  trackPopover.hidden=false;
+  const box=anchor.getBoundingClientRect();
+  const width=Math.min(265,window.innerWidth-22);
+  const height=trackPopover.offsetHeight;
+  const left=Math.min(window.innerWidth-width-11,Math.max(11,box.right-width));
+  const below=box.bottom+8;
+  const top=below+height<window.innerHeight-12?below:Math.max(10,box.top-height-8);
+  trackPopover.style.left=left+'px';
+  trackPopover.style.top=Math.max(10,top)+'px';
 }
 function newPlaylist() {
   $('playlistName').value = '';
@@ -554,8 +622,15 @@ function removeFromPlaylist(id) {
 }
 function handleMenu(action, button) {
   const t = state.menuTrack;
-  $('trackDialog').close();
-  if (!t) return;
+  if (!t)return;
+  if(action==='offset-minus'||action==='offset-plus'||action==='offset-reset'){
+    const prefs=window.AurelisPreferences;
+    const n=prefs?.changeSongOffset(t,action==='offset-plus'?.25:-.25,action==='offset-reset')??0;
+    const target=trackPopover.querySelector('#popOffsetValue');
+    if(target)target.textContent=(n>=0?'+':'')+Number(n).toFixed(2)+' s';
+    return;
+  }
+  closeSongPopover();
   if (action === 'play') play(t);
   if (action === 'queue') addQueue(t);
   if (action === 'next') addQueue(t, true);
@@ -585,7 +660,7 @@ function handleClick(event) {
   const t = btn.dataset.id ? trackById(btn.dataset.id) : null;
   if (type === 'play') play(t);
   else if (type === 'like') like(t);
-  else if (type === 'menu') showTrackMenu(t);
+  else if (type === 'menu') showTrackMenu(t,btn);
   else if (type === 'genre') openGenre(btn.dataset.term);
   else if (type === 'explore') { navigate('search'); $('searchInput').focus(); }
   else if (type === 'new-playlist') newPlaylist();
@@ -662,13 +737,17 @@ function setupEvents() {
     createPlaylist($('playlistName').value);
     $('playlistDialog').close();
   });
-  $('songMenuOptions').addEventListener('click', e => {
-    const button = e.target.closest('[data-menu]');
-    if (button) handleMenu(button.dataset.menu, button);
+  trackPopover.addEventListener('click',e=>{
+    const button=e.target.closest('[data-menu]');
+    if(button)handleMenu(button.dataset.menu,button);
   });
-  $('closeTrackMenu').addEventListener('click', () => $('trackDialog').close());
-  $('settingsButton').addEventListener('click', () => $('settingsDialog').showModal());
-  $('settingsClose').addEventListener('click', () => $('settingsDialog').close());
+  document.addEventListener('pointerdown',e=>{
+    if(!trackPopover.hidden&&!trackPopover.contains(e.target)
+       &&!e.target.closest('[data-action=menu]'))closeSongPopover();
+  },true);
+  document.addEventListener('scroll',()=>{if(!trackPopover.hidden)closeSongPopover();},true);
+  window.addEventListener('resize',()=>{if(!trackPopover.hidden)closeSongPopover();});
+  $('settingsButton').addEventListener('click',()=>window.AurelisPreferences?.open());
   audio.addEventListener('play', () => { setPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
   audio.addEventListener('pause', () => { setPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
   audio.addEventListener('timeupdate', updateTime);
@@ -701,7 +780,7 @@ function setupEvents() {
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
     if (e.key === '/' && !editing) { e.preventDefault(); $('searchInput').focus(); }
     if (e.code === 'Space' && !editing && !document.querySelector('dialog[open]')) { e.preventDefault(); toggle(); }
-    if (e.key === 'Escape') closePanel();
+    if (e.key === 'Escape') { closeSongPopover();closePanel(); }
   });
   if ('mediaSession' in navigator) {
     const handlers = {
