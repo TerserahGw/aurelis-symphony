@@ -90,7 +90,9 @@ function uniqueRadio(items,forbidden=[],limit=8){
   }
   return result;
 }
-let searchTimer = null;
+let searchTimer=null;
+let searchController=null;
+let lastAudioProbeSequence=-1;
 let currentGenre = '';
 let playerInit = false;
 const genres = [
@@ -143,10 +145,19 @@ function toast(message, error = false) {
   setTimeout(() => item.remove(), 4200);
 }
 async function api(route, options = {}) {
-  const res = await fetch(route, { ...options, headers: { Accept: 'application/json', ...(options.headers || {}) } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || data.error || 'Tidak dapat menghubungi server');
-  return data;
+  // Bound network waits on mobile data and cancel obsolete search requests.
+  const timeout=AbortSignal.timeout(20_000);
+  const signal=options.signal?AbortSignal.any([options.signal,timeout]):timeout;
+  try{
+    const res=await fetch(route,{...options,signal,
+      headers:{Accept:'application/json',...(options.headers||{})}});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.message||data.error||'Tidak dapat menghubungi server');
+    return data;
+  }catch(error){
+    if(error?.name==='TimeoutError')throw new Error('Permintaan terlalu lama. Coba lagi.');
+    throw error;
+  }
 }
 function skeleton(count = 6) {
   return '<div class="album-grid">' + Array.from({ length: count }, () =>
@@ -278,25 +289,31 @@ function navigate(view, playlistId) {
   $('scrollArea').scrollTo({ top: 0, behavior: 'smooth' });
 }
 async function search(term) {
-  term = String(term || '').trim();
-  state.query = term;
-  if (term.length < 2) { state.searching = false; state.results = []; render(); return; }
-  const seq = ++state.sequence;
+  term=String(term||'').trim();
+  state.query=term;
+  const seq=++state.sequence;
+  searchController?.abort();
+  searchController=null;
+  if(term.length<2){state.searching=false;state.results=[];render();return;}
+  const controller=new AbortController();
+  searchController=controller;
   state.searching = true;
   state.view = 'search';
   render();
   try {
-    const data = await api('/api/v1/search?provider=youtube&q=' + encodeURIComponent(term) + '&limit=30');
+    const data=await api('/api/v1/search?provider=youtube&q='+encodeURIComponent(term)+'&limit=30',
+      {signal:controller.signal});
     if (seq !== state.sequence) return;
     state.results = uniq(data.tracks || []);
     state.results.forEach(remember);
     save();
   } catch (e) {
-    if (seq !== state.sequence) return;
-    state.results = [];
-    toast('Pencarian gagal: ' + e.message, true);
-  } finally {
-    if (seq === state.sequence) { state.searching = false; render(); }
+    if(seq!==state.sequence||controller.signal.aborted)return;
+    state.results=[];
+    toast('Pencarian gagal: '+e.message,true);
+  }finally{
+    if(searchController===controller)searchController=null;
+    if(seq===state.sequence){state.searching=false;render();}
   }
 }
 async function loadHome() {
@@ -362,7 +379,8 @@ function updateTime() {
 async function play(t) {
   if (!t) return;
   if (!t.id) return;
-  const seq = ++state.playSequence;
+  const seq=++state.playSequence;
+  lastAudioProbeSequence=-1;
   closeSongPopover();
   state.current=t;
   // A listening session can be repeated in order or reshuffled after it ends.
@@ -872,24 +890,27 @@ function setupEvents() {
     if (state.repeat === 2) { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
   });
   audio.addEventListener('error', async () => {
-    if (!state.current || !audio.src) return;
-    const t = state.current;
-    const id = t.videoId || (String(t.id).startsWith('yt-') ? String(t.id).slice(3) : '');
-    state.panelError = 'Sumber audio gagal dimuat.';
-    if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-      try {
-        const result = await fetch('/api/v2/audio/' + id + '?probe=1');
-        const detail = await result.json();
-        if (state.current?.id === t.id && !detail.ok) {
-          state.panelError = detail.message || detail.code || state.panelError;
-        }
-      } catch {}
-    }
-    if (state.current?.id === t.id) {
-      toast(state.panelError, true);
-      emit('error');
-      if (state.drawer === 'now') renderPanel();
-    }
+    if(!state.current||!audio.src)return;
+    const t=state.current,seq=state.playSequence;
+    if(lastAudioProbeSequence===seq)return;
+    lastAudioProbeSequence=seq;
+    state.panelError='Sumber audio gagal dimuat.';
+    toast(state.panelError,true);
+    emit('error');
+    if(state.drawer==='now')renderPanel();
+    const id=t.videoId||(String(t.id).startsWith('yt-')?String(t.id).slice(3):'');
+    if(!/^[a-zA-Z0-9_-]{11}$/.test(id))return;
+    try{
+      const result=await fetch('/api/v2/audio/'+id+'?probe=1',
+        {signal:AbortSignal.timeout(12_000)});
+      const detail=await result.json().catch(()=>({}));
+      if(seq!==state.playSequence||state.current?.id!==t.id)return;
+      if(!result.ok||!detail.ok){
+        state.panelError=detail.message||detail.code||'Sumber YouTube membatasi akses audio.';
+        emit('error');
+        if(state.drawer==='now')renderPanel();
+      }
+    }catch{/* Diagnostic is best-effort; never block the player indefinitely. */}
   });
   document.addEventListener('keydown', e => {
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
@@ -966,5 +987,10 @@ async function boot() {
     }
   }).catch(() => {});
 }
-boot();
+boot().catch(error=>{
+  console.error('Aurelis initialization failed:',error);
+  const label=document.getElementById('sourceStatus');
+  if(label)label.textContent='Koneksi gagal · muat ulang halaman';
+  toast('Aurelis gagal memuat. Periksa koneksi lalu refresh.',true);
+});
 })();
