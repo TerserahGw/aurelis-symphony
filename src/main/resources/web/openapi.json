@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.0.0",
-    "description": "Node.js metadata discovery and official visible provider playback. No raw YouTube audio extraction."
+    "version": "2.1.0",
+    "description": "Aurelis Symphony 2.1 — metadata search with optional experimental unofficial YouTube.js direct-audio relay, plus original licensed media. Not an official YouTube playback integration."
   },
   "servers": [
     {
@@ -158,7 +158,7 @@
     },
     "/api/v1/info": {
       "get": {
-        "summary": "Official embed descriptor",
+        "summary": "Unverified YouTube direct-audio descriptor",
         "parameters": [
           {
             "name": "url",
@@ -369,6 +369,55 @@
         "responses": {
           "200": {
             "description": "Track"
+          }
+        }
+      }
+    },
+    "/api/v2/status": {
+      "get": {
+        "summary": "Experimental audio backend status",
+        "responses": {
+          "200": {
+            "description": "Runtime stream status"
+          }
+        }
+      }
+    },
+    "/api/v2/home": {
+      "get": {
+        "summary": "Suggested tracks based on non-personalized music search",
+        "responses": {
+          "200": {
+            "description": "Search suggestions or original fallback"
+          }
+        }
+      }
+    },
+    "/api/v2/audio/{videoId}": {
+      "get": {
+        "summary": "Experimental direct-audio byte relay, no DRM or access bypass",
+        "parameters": [
+          {
+            "name": "videoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unseekable audio stream"
+          },
+          "206": {
+            "description": "Partial audio stream"
+          },
+          "403": {
+            "description": "Streaming disabled"
+          },
+          "502": {
+            "description": "Audio unavailable or upstream range unsupported"
           }
         }
       }

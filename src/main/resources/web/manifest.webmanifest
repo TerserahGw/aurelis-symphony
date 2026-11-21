@@ -1,1 +1,17 @@
-{"name":"Aurelis Symphony","short_name":"Aurelis","description":"Feel every note.","start_url":"/","display":"standalone","background_color":"#0a0d12","theme_color":"#0a0d12","icons":[{"src":"/assets/aurelis.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "Aurelis Symphony 2.1",
+  "short_name": "Aurelis",
+  "description": "Find your frequency.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b10",
+  "theme_color": "#090b10",
+  "icons": [
+    {
+      "src": "/assets/aurelis.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

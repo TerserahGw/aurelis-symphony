@@ -6,8 +6,9 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { searchMusic, lookupYouTube, getSearchStatus } from './server/youtube.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
+import { relayAudio, directAudioStatus } from './server/stream.mjs';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -86,13 +87,21 @@ async function api(req, res, url, head) {
   const duration = bounded(q.get('duration'), 0, 7200);
 
   if (endpoint === '/api/v1/health' || endpoint === '/health') {
-    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'official-embed-and-licensed-audio', time: new Date().toISOString() }, head);
+    return response(res, 200, { ok: true, service: 'Aurelis Symphony', version: APP_VERSION, runtime: 'node', discovery: 'youtubei.js', playback: 'experimental-direct-audio-and-licensed-audio', time: new Date().toISOString() }, head);
   }
   if (endpoint === '/api/v1/config') return response(res, 200, {
     name: 'Aurelis Symphony', version: APP_VERSION, cloudLibrary,
     searchProviders: ['youtube', 'catalog'], lyricsSources: LYRIC_SOURCES,
-    discovery: getSearchStatus(), player: 'YouTube IFrame / HTML5 audio'
+    discovery: getSearchStatus(), player: 'HTML5 Audio (no embed)', directAudio: directAudioStatus()
   }, head);
+  if (endpoint.startsWith('/api/v2/audio/')) return relayAudio(req, res, endpoint);
+  if (endpoint === '/api/v2/status') return response(res, 200, { ok: true, version: APP_VERSION, stream: directAudioStatus() }, head);
+  if (endpoint === '/api/v2/home') {
+    const seeds = ['late night chill music', 'indie pop songs', 'japanese city pop', 'top hits music'];
+    const seed = capped(q.get('seed'), 75) || seeds[Number(new Date().getUTCDay()) % seeds.length];
+    try { return response(res, 200, { title:'Made for your mood', tracks:await searchMusic(seed, 16), seed }, head); }
+    catch { return response(res, 200, { title:'Aurelis Originals', tracks:catalog, fallback:true }, head); }
+  }
   if (endpoint === '/api/tracks' || endpoint === '/api/v1/catalog') {
     const filtered = catalog.filter(t => !query || (t.title + ' ' + t.artist).toLowerCase().includes(query.toLowerCase()));
     return response(res, 200, { tracks: filtered.slice(0, bounded(q.get('limit'), 40, 100)), total: filtered.length }, head);
@@ -116,7 +125,7 @@ async function api(req, res, url, head) {
       const tracks = await searchMusic(isRec ? term + ' similar music' : term, bounded(q.get('limit'), 20, 30) || 20);
       const filtered = isRec ? tracks.filter(t => t.id !== q.get('exclude')) : tracks;
       return response(res, 200, { provider: 'youtube', tracks: filtered, ...(isRec ? { strategy: 'related-search', personalized: false } : {}),
-        notice: 'YouTube results play through the visible official player. Embedded playback may be unavailable.' }, head);
+        notice: 'Direct YouTube audio is unofficial and may be unavailable; no embedded player or DRM bypass is used.' }, head);
     } catch (e) {
       console.warn('Discovery failed:', e.message);
       return response(res, 503, { error: 'search_unavailable', message: 'The music discovery service is temporarily unavailable.', tracks: [] }, head);
@@ -126,7 +135,7 @@ async function api(req, res, url, head) {
     const urlValue = capped(q.get('url'), 500);
     const item = lookupYouTube(urlValue);
     if (!item) return apiError(res, 400, 'unsupported_url', 'Only recognized HTTPS YouTube URLs are supported.', head);
-    return response(res, 200, { track: { ...item, audio: [], playback: { mode: 'official-embed', provider: 'YouTube', url: item.url } } }, head);
+    return response(res, 200, { track: { ...item, audio: [], playback: { mode: 'experimental-direct-audio', provider: 'youtubei.js', url: '/api/v2/audio/' + item.videoId } } }, head);
   }
   if (endpoint === '/api/v1/lyrics/sources') return response(res, 200, { sources: LYRIC_SOURCES }, head);
   if (endpoint === '/api/v1/lyrics' || endpoint === '/api/v1/lyrics/all' || endpoint === '/api/v1/lyrics/lrc') {
@@ -188,8 +197,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Content-Security-Policy',
-    "default-src 'self'; script-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://s.ytimg.com; style-src 'self'; img-src 'self' https: data:; media-src 'self' https: blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://w.soundcloud.com; connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' blob:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'");
   if (CORS) { res.setHeader('Access-Control-Allow-Origin', CORS); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS'); }
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   let url;

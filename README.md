@@ -1,99 +1,92 @@
 <div align="center">
 
-# ✦ Aurelis Symphony 2.0
-**Feel every note. Find yourself in the lyrics.**
+# ✦ Aurelis Symphony 2.1
+### Music, your way.
 
-A responsive music web application with **Node.js 22**, YouTube.js music discovery and **visible official YouTube playback**, personal playlists, smart related-search queue and synchronized lyrics for supported sources.
+**A redesigned mobile-first music web app, native audio controls, YouTube.js discovery, personal playlists and synchronized lyrics.**
 
-![Node 22](https://img.shields.io/badge/Backend-Node.js%2022-8ed2c5)
-![YouTube.js 18.3](https://img.shields.io/badge/Discovery-YouTube.js%2018.3-a4b5d9)
-![License GPL v3](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)
+![Node.js 22](https://img.shields.io/badge/Node.js-22-9eeac1)
+![YouTube.js](https://img.shields.io/badge/youtubei.js-18.3.0-9caff5)
+![Experimental direct audio](https://img.shields.io/badge/Direct%20audio-experimental-orange)
 
 </div>
 
-## Version 2.0 — what changed
+## What's new in 2.1
 
-- The production backend moved from **Java 17 + NewPipeExtractor** to **Node.js 22 + youtubei.js 18.3.0**, while retaining the existing HTML/CSS/JS UI and original demo tracks.
-- YouTube Music song search is attempted first and ordinary YouTube search is used as fallback. Requests are cached for four minutes and throttled. Results are **metadata**, not unlicensed audio streams.
-- Play YouTube content with the **visible official YouTube IFrame Player API**. Player controls, lyric timing (where accessible), and end-of-song events use the IFrame API. Embeds can still fail due to restrictions, and browser autoplay can require user interaction.
-- **Up Next:** recommends related tracks through another search; three suggestions appear in the queue and can be managed. This is not yet a personalized recommendation algorithm. Search results, bookmarks and playlists are stored locally in browser storage.
-- Original self-produced demo MP3s still use HTML5 Audio with proper HTTP 206 Range handling.
-- **Lyrics in the Node runtime:** LRCLIB synced/plain lyrics and lyrics.ovh plain fallback. The seven-provider Java prototype remains in legacy source but is **not running** in the Node production image. Lyrics are best-effort and subject to availability/rights.
-- Optional API search mode using official YouTube Data API v3 via YOUTUBE_API_KEY. Local catalog/demo playback remains functional when discovery is offline.
-- No media proxying, no signature deciphering, no raw YouTube audio extraction and no bypass of provider permissions. Searchable songs are not necessarily embeddable.
+- **Complete frontend redesign:** dark Spotify / YouTube Music-inspired layout, compact side navigation, responsive album cards, search results, library, saved tracks, playlist screens, song menu, native mini-player, mobile navigation, lyrics, and queue panel.
+- The new frontend is in assets/v21.js and assets/v21.css; index.html loads them. Previous HTML is backed up as index-v20.html and the old JS/CSS remain in the repository.
+- **No YouTube iframe in the 2.1 frontend.** HTMLAudioElement plays original MP3 files and requests experimental direct audio from /api/v2/audio/:id for YouTube.js results.
+- YouTube.js 18.3.0 searches music, retrieves public format information and, when possible, relays audio as a stream with byte-range support. Direct streaming **can fail** due to provider restrictions, IP blocking, token requirements, unsupported codecs or HTTP Range behavior. We do not bypass DRM, paywalls, access checks, or authentication.
+- **Three Up Next recommendations** are refreshed by a related-song search. This is not a real personalized recommendation model.
+- Favorites, history and playlists reuse the same existing localStorage keys as 2.0. No account login and no guaranteed cross-device sync.
+- Lyrics: LRCLIB synced/plain lyrics and lyrics.ovh fallback. Lyrics with no timestamp don't animate in sync.
 
-## Altare Global / GitHub Container Registry
+## Important: service terms and security
 
-The publishing workflow automatically builds these images on successful pushes to main:
+YouTube's Developer Policies do not permit separating audio from video through YouTube API Services; this experimental mode is **not a supported or officially compliant YouTube integration**. Do not assume unrestricted access or redistribution rights. For a public service, use recordings you own or have permission to distribute, or use an authorized platform integration.
 
-- ghcr.io/terserahgw/aurelis-symphony:latest
-- ghcr.io/terserahgw/aurelis-symphony:2.0.0
+The optional AURELIS_STREAM_EVAL=true setting follows YouTube.js's documented mechanism to execute code used to decipher playback URLs. This executes upstream-supplied script in the Node process and **carries security risk**. It is disabled by default. Only enable when you understand and accept that risk on a suitably isolated host; it is not recommended for sensitive production infrastructure. Even enabled, audio playback can fail.
 
-In Altare Global, use the Docker image **ghcr.io/terserahgw/aurelis-symphony:2.0.0** once it appears in GHCR. Keep your existing domain and routing, and set the service port to **8080**.
+See https://developers.google.com/youtube/terms/developer-policies/ and https://ytjs.dev/guide/getting-started
 
-Recommended variables for a 512 MB RAM / 10% CPU plan:
+## Altare Global redeploy
+
+The CI workflow builds an image after successful tests on main:
+
+    ghcr.io/terserahgw/aurelis-symphony:2.1.0
+
+**Docker Image hosting:** change the old image reference to the 2.1.0 tag, preserve the domain, leave Docker CMD as default, keep service port **8080**, and select Redeploy / Pull new image.
+
+Suggested environment values:
 
     HOST=0.0.0.0
     PORT=8080
     SEARCH_BACKEND=youtubei
+    AURELIS_DIRECT_AUDIO=true
+    AURELIS_STREAM_EVAL=false
+    AURELIS_MAX_STREAMS=5
     AURELIS_CLOUD_LIBRARY=false
     NODE_OPTIONS=--max-old-space-size=192
 
-If the hosting panel only has a Node runtime instead of Docker, use Node >=22 and:
+For larger instances, adjust AURELIS_MAX_STREAMS and Node heap based on actual usage, not RAM alone. Real limits include upstream bandwidth, connection count and hosting egress. If your Altare deployment is connected to GitHub rather than GHCR, set Node >= 22, npm install --omit=dev, and npm start.
 
-    npm install --omit=dev
-    npm start
+To enable the risky experimental decipher evaluator, **explicitly** set AURELIS_STREAM_EVAL=true only if you accept the security and service-terms limitations described above. Leave AURELIS_DIRECT_AUDIO=false to disable experimental streaming completely.
 
-Startup file: server.mjs. The image sets its own safe non-root user and heap limit; **192 MB V8 heap is not a guarantee of total process RAM**.
+## Verify deployment
 
-Optional source selection:
+1. /api/v1/health must show version 2.1.0 and playback experimental-direct-audio-and-licensed-audio.
+2. /api/v2/status reports whether direct audio and the optional evaluator are enabled.
+3. /api/v1/catalog returns the three original demo tracks.
+4. /demo/aether-bloom.mp3 should play and support HTTP byte-range 206.
+5. /api/v1/search?q=Another%20Love&provider=youtube should return metadata if YouTube.js can access the provider.
+6. /api/v2/audio/MwpMEbgC7DA is the **experimental** direct audio route; success is not guaranteed. If it returns 502, inspect Altare logs for error codes and verify network conditions before changing settings. Do not confuse passing CI with successfully streaming YouTube from Altare.
 
-- SEARCH_BACKEND=youtubei: unofficial YouTube.js metadata discovery (default; may break when YouTube changes).
-- SEARCH_BACKEND=official plus YOUTUBE_API_KEY=...: official YouTube Data API v3 video search. API key/quota required; this does not provide direct audio streams.
+Browser users may need to clear cache once after redeploy; index.html now points to versioned v21 assets.
 
-Optional library sync: AURELIS_CLOUD_LIBRARY=true with a persistent AURELIS_DATA_DIR volume. Without persistence, **do not enable** cloud sync, since data may be lost on redeploy. Browser-local playlists and likes do not require it.
-
-## Test your deployment
-
-Visit:
-
-1. /api/v1/health — must show version 2.0.0 and ok:true.
-2. /api/v1/catalog — three original demo tracks.
-3. /demo/aether-bloom.mp3 — playable audio; Range requests should return 206.
-4. /api/v1/config — selected discovery backend, available providers.
-5. /api/v1/search?q=Another%20Love&provider=youtube — attempts live metadata discovery; **live availability is not guaranteed by CI**.
-6. Search from Explore, choose a song, and use the **visible YouTube player**. Embedding/ads/availability are controlled by YouTube.
-
-For API compatibility, /api/tracks is an alias of /api/v1/catalog. /api/v1/info returns a secure embed descriptor without raw audio URLs.
-
-## REST API
-
-See [docs/API.md](docs/API.md) or /api/v1/openapi.json. Key endpoints:
-
-    GET /api/v1/health
-    GET /api/v1/config
-    GET /api/v1/catalog
-    GET /api/v1/search?provider=youtube&q=Another%20Love
-    GET /api/v1/recommendations?track=Another%20Love&artist=Tom%20Odell&exclude=yt-...
-    GET /api/v1/info?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DMwpMEbgC7DA
-    GET /api/v1/lyrics?track=Another%20Love&artist=Tom%20Odell
-    GET /api/v1/lyrics/sources
-
-## Local development and testing
+## Develop
 
     npm install
     npm run check
     npm test
     npm start
 
-Node's built-in HTTP server keeps RAM usage modest, without Express/Next.js or a frontend bundler. CI checks JavaScript syntax, HTTP health, demo byte ranges, metadata-only playback descriptors and Docker image build.
+Backend: Node.js 22 built-in HTTP; no frontend bundler or Chromium. The tests are offline and intentionally never require access to YouTube. CI also builds the production Docker image.
 
-## Limitations and licensing
+## API
 
-YouTube's Developer Policies prohibit isolating audio from video and hidden/background playback using YouTube API Services. The YouTube IFrame is **not** equivalent to an independent licensed audio streaming service; access, autoplay and embedded playback vary. You may host original or appropriately licensed audio for independent playback using the catalog.
+- GET /api/v1/health
+- GET /api/v1/config
+- GET /api/v1/catalog
+- GET /api/v1/search?q=...&provider=youtube
+- GET /api/v1/recommendations?track=...&artist=...
+- GET /api/v2/home
+- GET /api/v2/status
+- GET /api/v2/audio/:videoId (experimental streaming)
+- GET /api/v1/lyrics?track=...&artist=...
+- GET /api/v1/library and PUT /api/v1/library (optional)
 
-The old Java 17 + NewPipeExtractor files remain in the repo as legacy code only; the production Node 2.0 Docker image does not build or execute them.
+Full reference: docs/API.md and /api/v1/openapi.json.
 
-This repository remains GPL-3.0-or-later. Refer to LICENSE. YouTube.js is MIT licensed and is not endorsed by YouTube. Lyrics belong to their owners/providers.
+## Notes
 
-See https://developers.google.com/youtube/terms/developer-policies/ for the provider rules.
+The repository remains GPL-3.0-or-later. Original demo tracks are included. youtubei.js is distributed under the MIT license and is not affiliated with YouTube. Third-party music and lyric rights remain with the respective owners.

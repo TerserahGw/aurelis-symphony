@@ -52,7 +52,7 @@ function normalize(node) {
     album: readText(node.album?.name || node.album) || '',
     duration: durationSeconds(node.duration || node.length),
     artwork: thumbnail(node), url: 'https://www.youtube.com/watch?v=' + id,
-    provider: 'youtube', type: 'online', playback: { mode: 'official-embed', provider: 'YouTube' }
+    provider: 'youtube', type: 'online', playback: { mode: 'experimental-direct-audio', provider: 'youtubei.js' }
   };
 }
 function gather(root, limit = 100) {
@@ -140,6 +140,6 @@ export function lookupYouTube(raw) {
   } catch { return null; }
 }
 export function getSearchStatus() {
-  return { backend: process.env.SEARCH_BACKEND || 'youtubei', provider: 'youtube', mode: 'metadata-only',
-    rawAudioProxy: false, unofficial: (process.env.SEARCH_BACKEND || 'youtubei') === 'youtubei' };
+  return { backend: process.env.SEARCH_BACKEND || 'youtubei', provider: 'youtube', mode: 'metadata-and-experimental-audio',
+    rawAudioProxy: true, unofficial: (process.env.SEARCH_BACKEND || 'youtubei') === 'youtubei' };
 }
