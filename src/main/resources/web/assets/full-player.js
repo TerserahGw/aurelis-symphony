@@ -89,7 +89,10 @@ let opened=false,closingTimer,tab='lyrics',trackId='',lastLyrics=null;
 let translationEnabled=read('playerTranslation',false);
 let romanEnabled=read('playerRomanization',true);
 let translations=new Map(),translationBusy=false,lastFocus=-2,lastSeek=false;
-let timerToast, touchY=0,touchX=0,lastTranslateIndex=-1;
+let timerToast,touchY=0,touchX=0,lastTranslateIndex=-1;
+let frame=0,lastFrame=0;
+const prefs=()=>window.AurelisPreferences?.values || {karaoke:true,lineGlow:true,lyricSize:31,romanization:romanEnabled,translation:translationEnabled};
+const lyricClock=s=>(Number(s.time)||0)+(window.AurelisPreferences?.getOffset(s.current)||0);
 function flash(text) {
   $('fpToast').textContent=text;
   $('fpToast').classList.add('show');
@@ -151,9 +154,42 @@ function focusIndex(lyrics,time) {
   }
   return index;
 }
+function paintKaraoke(s,index){
+  if(tab!=='lyrics')return;
+  const settings=prefs(),time=lyricClock(s);
+  const lines=s.lyrics?.lines||[];
+  const nodes=$('fpLyricsPane').querySelectorAll('[data-lyric-index]');
+  for(let i=0;i<nodes.length;i++){
+    const line=lines[i],node=nodes[i];
+    if(!line)continue;
+    const words=node.querySelectorAll('[data-word-start]');
+    if(words.length&&settings.karaoke!==false){
+      for(const span of words){
+        const start=Number(span.dataset.wordStart),end=Math.max(start+.05,Number(span.dataset.wordEnd)||start+.45);
+        const fill=time<=start?0:time>=end?100:Math.min(100,Math.max(0,(time-start)/(end-start)*100));
+        span.style.setProperty('--fill',fill.toFixed(1)+'%');
+      }
+    }
+    const lineElement=node.querySelector('.fp-line-progress');
+    if(lineElement){
+      const start=Number(line.time)||0,end=Math.max(start+.25,Number(line.endTime)||start+3);
+      const fill=settings.lineGlow===false?0:time<=start?0:time>=end?100:Math.min(100,(time-start)/(end-start)*100);
+      lineElement.style.setProperty('--fill',fill.toFixed(1)+'%');
+    }
+  }
+}
+function animateWords(now){
+  if(!opened)return;
+  if(now-lastFrame>=32){
+    lastFrame=now;
+    if(tab==='lyrics')updateClock();
+  }
+  frame=requestAnimationFrame(animateWords);
+}
 function updateFocus(s) {
   if(tab!=='lyrics')return;
-  const index=focusIndex(s.lyrics,s.time);
+  const index=focusIndex(s.lyrics,lyricClock(s));
+  paintKaraoke(s,index);
   if(index===lastFocus)return;
   lastFocus=index;
   const children=$('fpLyricsPane').querySelectorAll('[data-lyric-index]');
@@ -164,7 +200,7 @@ function updateFocus(s) {
   if(opened&&index>=0&&children[index]){
     const pane=$('fpLyricsPane'), node=children[index];
     pane.scrollTo({top:node.offsetTop-pane.offsetTop-pane.clientHeight*.22,
-      behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+      behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches||prefs().reduceMotion?'auto':'smooth'});
   }
   if(translationEnabled && index!==lastTranslateIndex) requestTranslations();
 }
@@ -224,22 +260,31 @@ function romanize(value) {
 }
 function renderLyrics(force=false) {
   if(!opened||tab!=='lyrics')return;
-  const s=snapshot(), l=s.lyrics;
+  const s=snapshot(),l=s.lyrics;
   if(l===lastLyrics&&!force)return;
   lastLyrics=l;
   const pane=$('fpLyricsPane');
   if(!s.current){pane.innerHTML='<p class="fp-lyrics-empty">✦<br>Putar lagu untuk membuka lirik</p>';return;}
   if(!l){pane.innerHTML='<p class="fp-lyrics-empty">Mencari lirik untuk lagu ini…</p>';return;}
   if(!l.lines?.length){pane.innerHTML='<p class="fp-lyrics-empty">Lirik belum tersedia untuk lagu ini.</p>';return;}
-  const key=String(s.current.id);
+  const key=String(s.current.id),options=prefs(),hasWords=l.lines.some(line=>line.words?.length);
   pane.innerHTML='<div class="fp-translation-credit">Lirik oleh '+esc(l.source||'Aurelis')+
-    ' · '+(l.synced?'Sinkron dengan musik':'Tanpa timestamp')+
+    ' · '+(hasWords?'Timestamp per kata':l.synced?'Sinkron per baris':'Tanpa timestamp')+
     (translationEnabled?' · Terjemahan Indonesia (MyMemory)':'')+'</div>'+
     l.lines.map((line,i)=>{
       const words=romanEnabled?romanize(line.text):'';
       const translated=translationEnabled?(translations.get(key+':'+i)||line.translation||''):'';
+      let text;
+      if(options.karaoke!==false&&Array.isArray(line.words)&&line.words.length){
+        text='<span class="fp-line-words">'+line.words.map(w=>'<span class="fp-word" data-word-start="'+
+          Number(w.start||0)+'" data-word-end="'+Number(w.end||w.start+.45)+'">'+esc(w.text||'')+'</span>').join('')+'</span>';
+      }else if(l.synced&&options.lineGlow!==false&&typeof line.time==='number'){
+        text='<span class="fp-line-progress">'+esc(line.text)+'</span>';
+      }else{
+        text='<span class="fp-line-plain">'+esc(line.text)+'</span>';
+      }
       return '<div class="fp-lyric" data-lyric-index="'+i+'" data-time="'+
-        (typeof line.time==='number'?line.time:'')+'">'+esc(line.text)+
+        (typeof line.time==='number'?line.time:'')+'"><span class="fp-lyric-body">'+text+'</span>'+
         (words?'<div class="fp-lyric-roman">'+esc(words)+'</div>':'')+
         (translated?'<div class="fp-lyric-sub">'+esc(translated)+'</div>':'')+'</div>';
     }).join('');
@@ -250,7 +295,7 @@ function renderLyrics(force=false) {
 async function requestTranslations() {
   const s=snapshot(), lines=s.lyrics?.lines;
   if(!opened||!translationEnabled||translationBusy||tab!=='lyrics'||!lines?.length||!s.current)return;
-  const idx=Math.max(0,focusIndex(s.lyrics,s.time));
+  const idx=Math.max(0,focusIndex(s.lyrics,lyricClock(s)));
   const key=String(s.current.id);
   const wanted=Array.from({length:Math.min(10,lines.length)},(_,j)=>Math.min(lines.length-1,Math.max(0,idx-2)+j));
   const indices=[...new Set(wanted)].filter(i=>!translations.has(key+':'+i) && !!lines[i]?.text);
@@ -304,10 +349,13 @@ function open() {
   document.body.classList.add('aurelis-fullscreen-open');
   tabTo('lyrics');
   requestAnimationFrame(()=>{box.classList.add('open');refresh();});
+  cancelAnimationFrame(frame);
+  frame=requestAnimationFrame(animateWords);
 }
 function close() {
   if(!opened)return;
   opened=false;
+  cancelAnimationFrame(frame);
   box.classList.add('closing');
   box.classList.remove('open');
   box.setAttribute('aria-hidden','true');
@@ -327,6 +375,7 @@ $('fpQueueTab').addEventListener('click',()=>tabTo('queue'));
 $('fpTranslate').addEventListener('click',()=>{
   translationEnabled=!translationEnabled;
   save('playerTranslation',translationEnabled);
+  window.AurelisPreferences?.set('translation',translationEnabled);
   $('fpTranslate').classList.toggle('selected',translationEnabled);
   lastLyrics=null;renderLyrics(true);
   if(translationEnabled)flash('Terjemahan Indonesia dinyalakan');
@@ -334,6 +383,7 @@ $('fpTranslate').addEventListener('click',()=>{
 $('fpRomanize').addEventListener('click',()=>{
   romanEnabled=!romanEnabled;
   save('playerRomanization',romanEnabled);
+  window.AurelisPreferences?.set('romanization',romanEnabled);
   $('fpRomanize').classList.toggle('selected',romanEnabled);
   lastLyrics=null;renderLyrics(true);
   flash(romanEnabled?'Romanisasi Jepang / Korea aktif':'Romanisasi dimatikan');
@@ -389,6 +439,13 @@ $('fpShell').addEventListener('touchend',e=>{
   touchY=0;touchX=0;
 },{passive:true});
 document.addEventListener('keydown',event=>{if(opened&&event.key==='Escape')close();});
+window.addEventListener('aurelis:preferences',()=>{
+  const current=prefs();
+  const newTranslation=!!current.translation,newRoman=!!current.romanization;
+  const rerender=newTranslation!==translationEnabled || newRoman!==romanEnabled;
+  translationEnabled=newTranslation;romanEnabled=newRoman;
+  if(opened){refresh();if(rerender){lastLyrics=null;renderLyrics(true);}else updateFocus(snapshot());}
+});
 window.addEventListener('aurelis:track',()=>{if(opened){refresh();renderLyrics(true);renderQueue();}});
 window.addEventListener('aurelis:player',()=>refresh());
 window.addEventListener('aurelis:time',()=>updateClock());
