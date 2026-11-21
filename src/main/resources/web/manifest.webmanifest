@@ -1,7 +1,7 @@
 {
-  "name": "Aurelis Symphony 2.1",
+  "name": "Aurelis Symphony",
   "short_name": "Aurelis",
-  "description": "Find your frequency.",
+  "description": "Find your frequency — ambient glass music islands.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080b10",
