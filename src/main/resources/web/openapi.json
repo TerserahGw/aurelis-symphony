@@ -2,32 +2,22 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "1.0.0",
-    "description": "Personal music discovery and multi-source lyrics API. External availability is not guaranteed."
+    "version": "2.0.0",
+    "description": "Node.js metadata discovery and official visible provider playback. No raw YouTube audio extraction."
   },
   "servers": [
     {
       "url": "/"
     }
   ],
-  "tags": [
-    {
-      "name": "Aurelis"
-    }
-  ],
   "paths": {
     "/api/v1/health": {
       "get": {
-        "summary": "Server status",
+        "summary": "Service health",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -37,16 +27,11 @@
     },
     "/api/v1/config": {
       "get": {
-        "summary": "Capabilities and sources",
+        "summary": "Backend and capabilities",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -56,11 +41,12 @@
     },
     "/api/v1/catalog": {
       "get": {
-        "summary": "Browse local, playable catalog",
+        "summary": "Bundled original songs",
         "parameters": [
           {
             "name": "q",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -68,36 +54,7 @@
           {
             "name": "limit",
             "in": "query",
-            "schema": {
-              "type": "integer",
-              "maximum": 100
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
-          "503": {
-            "description": "Upstream unavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{id}": {
-      "get": {
-        "summary": "Local track details",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -106,12 +63,6 @@
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -121,12 +72,12 @@
     },
     "/api/v1/search": {
       "get": {
-        "summary": "Search with NewPipeExtractor",
+        "summary": "Search music metadata",
         "parameters": [
           {
             "name": "q",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -134,16 +85,17 @@
           {
             "name": "provider",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "enum": [
-                "catalog",
-                "youtube",
-                "soundcloud",
-                "bandcamp",
-                "peertube",
-                "mediaccc"
-              ]
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -151,11 +103,52 @@
           "200": {
             "description": "Success"
           },
-          "400": {
-            "description": "Invalid request"
+          "503": {
+            "description": "Upstream unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/recommendations": {
+      "get": {
+        "summary": "Related-search queue",
+        "parameters": [
+          {
+            "name": "track",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           },
-          "429": {
-            "description": "Rate limited"
+          {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "exclude",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -165,27 +158,20 @@
     },
     "/api/v1/info": {
       "get": {
-        "summary": "Resolve external media metadata and audio choices",
+        "summary": "Official embed descriptor",
         "parameters": [
           {
             "name": "url",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "uri"
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -195,16 +181,11 @@
     },
     "/api/v1/lyrics/sources": {
       "get": {
-        "summary": "List all supported lyric integrations",
+        "summary": "Available lyrics providers",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -214,12 +195,12 @@
     },
     "/api/v1/lyrics": {
       "get": {
-        "summary": "Get best matched lyrics including lines and word timestamps",
+        "summary": "Best matching lyrics",
         "parameters": [
           {
             "name": "track",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -237,7 +218,7 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer"
+              "type": "string"
             }
           },
           {
@@ -253,12 +234,6 @@
           "200": {
             "description": "Success"
           },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
           "503": {
             "description": "Upstream unavailable"
           }
@@ -267,16 +242,36 @@
     },
     "/api/v1/lyrics/all": {
       "get": {
-        "summary": "Return results of each lyric provider (best-effort)",
+        "summary": "All lyric sources",
+        "parameters": [
+          {
+            "name": "track",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -286,29 +281,44 @@
     },
     "/api/v1/lyrics/lrc": {
       "get": {
-        "summary": "Return LRC or Enhanced LRC text",
+        "summary": "Export LRC",
         "parameters": [
           {
-            "name": "format",
+            "name": "track",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "enum": [
-                "lrc",
-                "enhanced"
-              ]
+              "type": "string"
+            }
+          },
+          {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -318,21 +328,11 @@
     },
     "/api/v1/library": {
       "get": {
-        "summary": "Load token-private library; requires cloud library enabled",
-        "security": [
-          {
-            "LibraryToken": []
-          }
-        ],
+        "summary": "Optional cloud library",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "503": {
             "description": "Upstream unavailable"
@@ -340,24 +340,35 @@
         }
       },
       "put": {
-        "summary": "Atomically replace token-private library JSON",
+        "summary": "Update private cloud library",
         "security": [
           {
-            "LibraryToken": []
+            "bearerAuth": []
           }
         ],
         "responses": {
           "200": {
-            "description": "Success"
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
-          "503": {
-            "description": "Upstream unavailable"
+            "description": "Saved"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{id}": {
+      "get": {
+        "summary": "Bundled track by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track"
           }
         }
       }
@@ -365,10 +376,9 @@
   },
   "components": {
     "securitySchemes": {
-      "LibraryToken": {
+      "bearerAuth": {
         "type": "http",
-        "scheme": "bearer",
-        "description": "64-character hexadecimal secret chosen by the client. Use HTTPS on public deployments."
+        "scheme": "bearer"
       }
     }
   }
