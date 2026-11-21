@@ -271,8 +271,18 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string"
-            }
+              "type": "string",
+              "enum": [
+                "lrclib",
+                "netease",
+                "qq",
+                "kugou",
+                "musixmatch",
+                "genius",
+                "lyricsovh"
+              ]
+            },
+            "description": "Optional lyric provider; unofficial endpoints are best-effort."
           }
         ],
         "responses": {
@@ -282,7 +292,8 @@
           "503": {
             "description": "Upstream unavailable"
           }
-        }
+        },
+        "description": "Prefer real per-word timing (Enhanced LRC / YRC / KRC / QRC / Richsync); do not fabricate karaoke progress when only line timing exists."
       }
     },
     "/api/v1/lyrics/all": {
@@ -357,8 +368,18 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string"
-            }
+              "type": "string",
+              "enum": [
+                "lrclib",
+                "netease",
+                "qq",
+                "kugou",
+                "musixmatch",
+                "genius",
+                "lyricsovh"
+              ]
+            },
+            "description": "Optional lyric provider; unofficial endpoints are best-effort."
           }
         ],
         "responses": {
