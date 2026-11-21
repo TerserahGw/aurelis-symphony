@@ -47,6 +47,8 @@ jobs:
               with urllib.request.urlopen(req,timeout=15) as r:
                 data=json.load(r).get('data',[])
                 print('Audius search',r.status,'tracks',len(data))
+              for row in data[:2]:
+                print('Audius track metadata:',{k:row.get(k) for k in ['id','is_streamable','is_stream_gated','is_downloadable','access','stream_conditions','title']})
               if data:
                 tid=data[0]['id']
                 print('Sample',tid,data[0].get('title','')[:60])
