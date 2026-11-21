@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.1.0",
-    "description": "Aurelis Symphony 2.1 — metadata search with optional experimental unofficial YouTube.js direct-audio relay, plus original licensed media. Not an official YouTube playback integration."
+    "version": "2.3.0",
+    "description": "Aurelis Symphony 2.3: YouTube-only metadata, artist-and-vibe radio, Enhanced LRC word timing, opt-in translation, unofficial experimental audio playback."
   },
   "servers": [
     {
@@ -111,7 +111,7 @@
     },
     "/api/v1/recommendations": {
       "get": {
-        "summary": "Related-search queue",
+        "summary": "Artist-and-vibe radio: title deduplication and artist diversity",
         "parameters": [
           {
             "name": "track",
@@ -140,6 +140,51 @@
           {
             "name": "limit",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recent",
+            "in": "query",
+            "description": "JSON array of recent tracks",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queued",
+            "in": "query",
+            "description": "JSON array of already queued tracks",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mood",
+            "in": "query",
+            "description": "Mood or genre hint",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "familiar, balanced or discover",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album",
+            "in": "query",
+            "description": "Album of anchor track",
             "required": false,
             "schema": {
               "type": "string"
@@ -385,12 +430,41 @@
     },
     "/api/v2/home": {
       "get": {
-        "summary": "Suggested tracks based on non-personalized music search",
+        "summary": "Metadata-based recommendations using client-supplied recent history",
         "responses": {
           "200": {
             "description": "Search suggestions or original fallback"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "recent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "JSON-encoded array of recent tracks"
+          },
+          {
+            "name": "mood",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "balanced",
+                "familiar",
+                "discover"
+              ]
+            }
+          }
+        ]
       }
     },
     "/api/v2/audio/{videoId}": {
@@ -404,6 +478,17 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "probe",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Read only initial bytes and return diagnostic JSON"
           }
         ],
         "responses": {
@@ -416,8 +501,55 @@
           "403": {
             "description": "Streaming disabled"
           },
-          "502": {
-            "description": "Audio unavailable or upstream range unsupported"
+          "424": {
+            "description": "Experimental audio unavailable or blocked by upstream"
+          }
+        }
+      }
+    },
+    "/api/v2/translate": {
+      "post": {
+        "summary": "Opt-in lyric translation via MyMemory",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "texts"
+                ],
+                "properties": {
+                  "texts": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 250
+                    }
+                  },
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "id",
+                      "en"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translations"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "429": {
+            "description": "Rate limited"
           }
         }
       }
