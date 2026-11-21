@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const defaults={
-  lyricSize:31, lyricOffset:0, karaoke:true, lineGlow:true, reduceMotion:false,
+  lyricSize:31, lyricOffset:0, karaoke:true, reduceMotion:false,
   compactCards:false, artworkBlur:true, radioMode:'balanced',
   romanization:true, translation:false
 };
@@ -40,6 +40,7 @@ shell.id='aurelisPreferences';
 shell.className='asp-overlay';
 shell.hidden=true;
 shell.innerHTML='<div class="asp-panel" role="dialog" aria-modal="true" aria-labelledby="aspHeading">'+
+  '<div class="asp-ambient" aria-hidden="true"><img id="aspAmbientImg" alt=""></div>'+
   '<aside class="asp-sidebar"><h2>Pengaturan</h2><p>Aurelis Symphony</p>'+
   '<nav class="asp-nav" id="aspNavigation">'+sections.map(([id,icon,text])=>
     '<button type="button" data-tab="'+id+'">'+ico(icon)+esc(text)+'</button>').join('')+'</nav>'+
@@ -133,10 +134,9 @@ function render(){
     html+=parts.heading('BACAAN');
     html+=parts.slide('lyricSize','Ukuran teks lirik','Atur teks lirik fullscreen untuk layar Android.',Number(values.lyricSize),20,46,1,' px');
     html+=parts.sw('karaoke','Progres per kata','Gunakan timestamp kata asli jika sumber menyediakannya.',values.karaoke);
-    html+=parts.sw('lineGlow','Progres baris','Tampilkan glow bertahap mengikuti waktu baris bila timestamp kata tidak ada.',values.lineGlow);
     html+=parts.sw('romanization','Romanisasi','Tampilkan bacaan romaji/kata Korea dalam huruf Latin.',values.romanization);
     html+=parts.sw('translation','Terjemahan Indonesia','Kirim baris lirik ke MyMemory hanya jika dinyalakan.',values.translation);
-    html+='<p class="asp-notice">Lirik Enhanced LRC mendukung timestamp per kata. Lirik biasa hanya punya timestamp per baris; progres baris merupakan perkiraan visual, bukan waktu asli tiap kata.</p>';
+    html+='<p class="asp-notice">Progres karaoke hanya tersedia untuk lirik dengan timestamp tiap kata. Lirik biasa tetap berpindah baris secara halus, tanpa progres terisi buatan.</p>';
   }
   if(active==='visual'){
     html+=parts.heading('TAMPILAN');
@@ -157,8 +157,21 @@ function render(){
   }
   $('aspContent').innerHTML=html;
 }
+function updateAmbient(){
+  const img=$('aspAmbientImg');
+  if(!img)return;
+  const artwork=snap().current?.artwork;
+  if(typeof artwork==='string' && /^https:\/\//i.test(artwork)){
+    img.src=artwork;
+    img.parentElement.classList.add('has-art');
+  }else{
+    img.removeAttribute('src');
+    img.parentElement.classList.remove('has-art');
+  }
+}
 function open(){
   beforeFocus=document.activeElement;
+  updateAmbient();
   active='audio';
   shell.hidden=false;
   render();
@@ -232,6 +245,7 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape'&&!shell.hidden){event.stopPropagation();close();}
 });
 persist();
+window.addEventListener('aurelis:track',()=>{if(!shell.hidden)updateAmbient();});
 window.AurelisPreferences=Object.freeze({
   open,close,get values(){return {...values};},
   getOffset,changeSongOffset,
