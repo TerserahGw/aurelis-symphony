@@ -92,6 +92,22 @@ let romanEnabled=read('playerRomanization',true);
 let translations=new Map(),translationBusy=false,lastFocus=-2,lastSeek=false;
 let timerToast,touchY=0,touchX=0,lastTranslateIndex=-1;
 let frame=0,lastFrame=0,lastKaraokeIndex=-999;
+const reduceMotionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
+function karaokeNeedsFrame(){
+  if(!opened || tab!=='lyrics' || document.hidden ||
+     prefs().reduceMotion || reduceMotionQuery.matches || prefs().karaoke===false)return false;
+  const s=snapshot();
+  return !s.paused && !!s.lyrics?.lines?.some(line=>line.words?.some(
+    w=>Number.isFinite(Number(w.start))&&Number.isFinite(Number(w.end))&&Number(w.end)>Number(w.start)));
+}
+function stopKaraokeFrame(){
+  if(frame)cancelAnimationFrame(frame);
+  frame=0;
+}
+function syncKaraokeFrame(){
+  if(!karaokeNeedsFrame()){stopKaraokeFrame();return;}
+  if(!frame)frame=requestAnimationFrame(animateWords);
+}
 let lastKaraokeEnabled=true,lastLineGlowEnabled=true;
 const prefs=()=>window.AurelisPreferences?.values || {karaoke:true,lineGlow:true,lyricSize:31,romanization:romanEnabled,translation:translationEnabled};
 const lyricClock=s=>(Number(s.time)||0)+(window.AurelisPreferences?.getOffset(s.current)||0);
@@ -113,8 +129,13 @@ function resetVisualTrack(t) {
   if(art(t?.artwork)) $('fpBackdrop').src=t.artwork;
   else $('fpBackdrop').removeAttribute('src');
   $('fpBottomLabel').textContent=t?.title||'Pilih lagu dari katalog';
-  $('fpMore').dataset.action=t?'menu':'';
+  // This button has a dedicated listener; never give it data-action="menu".
+  // The document-level action delegate would otherwise toggle the same menu
+  // a second time when this click bubbles, instantly closing it.
+  $('fpMore').removeAttribute('data-action');
   $('fpMore').dataset.id=safeId(t?.id);
+  $('fpMore').disabled=!t;
+  $('fpMore').setAttribute('aria-expanded','false');
 }
 function snapshot() {
   return app()?.snapshot() || {queue:[],suggestions:[],lyrics:null,autoplay:true,favorites:[],paused:true,duration:0,time:0};
@@ -196,10 +217,13 @@ function paintKaraoke(s,index){
 
 }
 function animateWords(now){
-  if(!opened)return;
+  frame=0;
+  if(!karaokeNeedsFrame())return;
   if(now-lastFrame>=32){
     lastFrame=now;
-    if(tab==='lyrics')updateClock();
+    // The real word timestamps are the only reason to animate at 30fps.
+    // Line-timed lyrics are updated by native audio timeupdate events.
+    updateClock();
   }
   frame=requestAnimationFrame(animateWords);
 }
@@ -230,6 +254,7 @@ function tabTo(value) {
   $('fpQueueTab').classList.toggle('active',value==='queue');
   $('fpLyricsTools').hidden=value!=='lyrics';
   if(value==='lyrics'){renderLyrics();updateClock();}else renderQueue();
+  syncKaraokeFrame();
 }
 // Offline romanization of Japanese kana and modern Hangul. Chinese characters
 // require a dictionary and remain unchanged; never fabricate pronunciations.
@@ -313,6 +338,7 @@ function renderLyrics(force=false) {
     }).join('');
   lastFocus=-2;lastKaraokeIndex=-999;
   updateFocus(s);
+  syncKaraokeFrame();
   if(translationEnabled)requestTranslations();
 }
 async function requestTranslations() {
@@ -371,14 +397,13 @@ function open() {
   tab='lyrics';trackId='';lastLyrics=null;
   document.body.classList.add('aurelis-fullscreen-open');
   tabTo('lyrics');
-  requestAnimationFrame(()=>{box.classList.add('open');refresh();});
-  cancelAnimationFrame(frame);
-  frame=requestAnimationFrame(animateWords);
+  requestAnimationFrame(()=>{if(opened){box.classList.add('open');refresh();syncKaraokeFrame();}});
 }
 function close() {
   if(!opened)return;
   opened=false;
-  cancelAnimationFrame(frame);
+  stopKaraokeFrame();
+  app()?.closeSongMenu?.();
   box.classList.add('closing');
   box.classList.remove('open');
   box.setAttribute('aria-hidden','true');
@@ -390,7 +415,11 @@ window.AurelisFullscreen={open,close};
 $('fpClose').addEventListener('click',close);
 $('fpHandle').addEventListener('click',close);
 $('fpLike').addEventListener('click',()=>app()?.toggleLike());
-$('fpMore').addEventListener('click',event=>app()?.openSongMenu?.(event.currentTarget));
+$('fpMore').addEventListener('click',event=>{
+  // Prevent the global [data-action] click handler from receiving this event.
+  event.stopPropagation();
+  if(!event.currentTarget.disabled)app()?.openSongMenu?.(event.currentTarget);
+});
 $('fpPlay').addEventListener('click',()=>app()?.toggle());
 $('fpNext').addEventListener('click',()=>app()?.next());
 $('fpPrev').addEventListener('click',()=>app()?.previous());
@@ -471,11 +500,17 @@ window.addEventListener('aurelis:preferences',()=>{
   translationEnabled=newTranslation;romanEnabled=newRoman;
   lastKaraokeEnabled=current.karaoke;lastLineGlowEnabled=current.lineGlow;
   if(opened){refresh();if(rerender){lastLyrics=null;renderLyrics(true);}else updateFocus(snapshot());}
+  syncKaraokeFrame();
 });
-window.addEventListener('aurelis:track',()=>{if(opened){refresh();renderLyrics(true);renderQueue();}});
-window.addEventListener('aurelis:player',()=>refresh());
+window.addEventListener('aurelis:track',()=>{
+  if(opened){refresh();renderLyrics(true);renderQueue();}
+  syncKaraokeFrame();
+});
+window.addEventListener('aurelis:player',()=>{refresh();syncKaraokeFrame();});
 window.addEventListener('aurelis:time',()=>updateClock());
-window.addEventListener('aurelis:lyrics',()=>{lastLyrics=null;renderLyrics(true);});
+window.addEventListener('aurelis:lyrics',()=>{lastLyrics=null;renderLyrics(true);syncKaraokeFrame();});
+document.addEventListener('visibilitychange',syncKaraokeFrame);
+reduceMotionQuery.addEventListener?.('change',syncKaraokeFrame);
 window.addEventListener('aurelis:queue',()=>{if(opened){renderQueue();refresh();}});
 window.addEventListener('aurelis:favorites',()=>refresh());
 window.addEventListener('aurelis:error',()=>{
