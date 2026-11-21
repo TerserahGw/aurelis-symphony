@@ -1,0 +1,71 @@
+name: Mobile player browser smoke
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - src/main/resources/web/assets/full-player.js
+      - src/main/resources/web/assets/full-player.css
+      - src/main/resources/web/index.html
+      - .github/workflows/player-browser.yml
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm install --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - name: Run mobile and desktop browser navigation
+        env:
+          HOST: 127.0.0.1
+          PORT: '18080'
+          AURELIS_DIRECT_AUDIO: 'false'
+        run: |
+          node server.mjs > /tmp/aurelis-browser-server.log 2>&1 &
+          sleep 2
+          node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+          const errors=[];
+          async function scenario(width,height,mobile){
+            const context=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile,locale:'id-ID'});
+            const page=await context.newPage();
+            page.on('pageerror',error=>errors.push(error.message));
+            await page.goto('http://127.0.0.1:18080/',{waitUntil:'domcontentloaded',timeout:15000});
+            await page.waitForSelector('.music-card [data-action=play]',{timeout:50000});
+            await page.locator('.music-card [data-action=play]').first().click({timeout:10000});
+            await page.locator('#playerTrack').click({timeout:10000});
+            await page.waitForSelector('#fullPlayer.open',{timeout:8000});
+            if(!await page.locator('#fpLyricsPane').isVisible())throw new Error('Lyrics not shown');
+            await page.locator('#fpQueueTab').click();
+            if(!await page.locator('#fpAutoSwitch').isVisible())throw new Error('Queue/autoplay not shown');
+            const old=await page.locator('#fpAutoSwitch').getAttribute('aria-checked');
+            await page.locator('#fpAutoSwitch').click();
+            const changed=await page.locator('#fpAutoSwitch').getAttribute('aria-checked');
+            if(old===changed)throw new Error('Autoplay did not toggle');
+            await page.locator('#fpLyricsTab').click();
+            await page.locator('#fpRomanize').click();
+            await page.locator('#fpTranslate').click();
+            await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'.png'});
+            await page.locator('#fpClose').click();
+            await page.waitForSelector('#fullPlayer[hidden]',{timeout:4000});
+            console.log((mobile?'Mobile':'Desktop')+' player open/queue/autoplay/romanize/translate/close OK');
+            await context.close();
+          }
+          await scenario(393,852,true);
+          await scenario(1240,800,false);
+          await browser.close();
+          if(errors.length)throw new Error('Browser page errors: '+errors.join(' | '));
+          JS
+      - name: Save UI screenshots for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelis-2-2-player-screenshots
+          path: /tmp/aurelis-*.png
+          if-no-files-found: ignore
