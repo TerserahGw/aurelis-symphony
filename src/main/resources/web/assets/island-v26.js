@@ -151,6 +151,7 @@
     morphAnimation?.cancel();
     const ghost=document.createElement('div');
     ghost.className='island-morph';
+    ghost.style.transformOrigin='0 0';
     const backdrop=getComputedStyle(document.documentElement).getPropertyValue('--aurelis-ambient-art');
     if(backdrop)ghost.style.setProperty('--aurelis-ambient-art',backdrop);
     document.body.appendChild(ghost);
@@ -159,10 +160,10 @@
     const start=full?mini:'none',end=full?'none':mini;
     const anim=ghost.animate([
       {transform:start,borderRadius:full?'32px':'0px',opacity:full?.9:.2,offset:0},
-      {transform:full?'translate(0,0) scale(.98)':'translate(0,0) scale(.98)',
-       borderRadius:full?'15px':'12px',opacity:full?.48:.55,offset:.62},
+      {transform:'translate3d(0,0,0) scale(.987)',borderRadius:'18px',
+       opacity:full?.62:.60,offset:.65},
       {transform:end,borderRadius:full?'0px':'32px',opacity:0,offset:1}
-    ],{duration:full?570:420,easing:'cubic-bezier(.2,.8,.22,1)',fill:'both'});
+    ],{duration:full?640:490,easing:'cubic-bezier(.17,.84,.19,1)',fill:'both'});
     morphAnimation=anim;
     anim.finished.catch(()=>{}).finally(()=>{ghost.remove();if(morphAnimation===anim)morphAnimation=null;});
   }
