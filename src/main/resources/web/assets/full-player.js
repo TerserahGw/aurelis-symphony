@@ -172,7 +172,7 @@ function paintKaraoke(s,index){
     lastKaraokeIndex=index;
     for(let i=0;i<nodes.length;i++){
       const fill=i<index?'100%':'0%';
-      for(const span of nodes[i].querySelectorAll('[data-word-start],.fp-line-progress')){
+      for(const span of nodes[i].querySelectorAll('[data-word-start]')){
         span.style.setProperty('--fill',fill);
         span.classList.remove('singing');
         span.classList.toggle('sung',i<index);
@@ -193,12 +193,7 @@ function paintKaraoke(s,index){
       span.classList.toggle('sung',fill>=99.5);
     }
   }
-  const lineElement=node.querySelector('.fp-line-progress');
-  if(lineElement){
-    const start=Number(line.time)||0,end=Math.max(start+.25,Number(line.endTime)||start+3);
-    const fill=settings.lineGlow===false?0:time<=start?0:time>=end?100:Math.min(100,(time-start)/(end-start)*100);
-    lineElement.style.setProperty('--fill',fill.toFixed(1)+'%');
-  }
+
 }
 function animateWords(now){
   if(!opened)return;
@@ -291,19 +286,24 @@ function renderLyrics(force=false) {
   if(!l){pane.innerHTML='<p class="fp-lyrics-empty">Mencari lirik untuk lagu ini…</p>';return;}
   if(!l.lines?.length){pane.innerHTML='<p class="fp-lyrics-empty">Lirik belum tersedia untuk lagu ini.</p>';return;}
   const key=String(s.current.id),options=prefs(),hasWords=l.lines.some(line=>line.words?.length);
-  pane.innerHTML='<div class="fp-translation-credit">Lirik oleh '+esc(l.source||'Aurelis')+
+  pane.innerHTML='<div class="fp-translation-credit">Lirik oleh '+esc(l.sourceLabel||l.source||'Aurelis')+
     ' · '+(hasWords?'Timestamp per kata':l.synced?'Sinkron per baris':'Tanpa timestamp')+
     (translationEnabled?' · Terjemahan Indonesia (MyMemory)':'')+'</div>'+
     l.lines.map((line,i)=>{
       const words=romanEnabled?romanize(line.text):'';
       const translated=translationEnabled?(translations.get(key+':'+i)||line.translation||''):'';
       let text;
-      if(options.karaoke!==false&&Array.isArray(line.words)&&line.words.length){
-        text='<span class="fp-line-words">'+line.words.map(w=>'<span class="fp-word" data-word-start="'+
-          Number(w.start||0)+'" data-word-end="'+Number(w.end||w.start+.45)+'">'+esc(w.text||'')+'</span>').join('')+'</span>';
-      }else if(l.synced&&options.lineGlow!==false&&typeof line.time==='number'){
-        text='<span class="fp-line-progress">'+esc(line.text)+'</span>';
+      const timedWords=Array.isArray(line.words)?line.words.filter(w=>
+        Number.isFinite(Number(w.start))&&Number.isFinite(Number(w.end))&&
+        Number(w.end)>Number(w.start)&&String(w.text||'').trim()):[];
+      if(options.karaoke!==false&&timedWords.length){
+        const needsSpacing=/\s/.test(line.text)&&timedWords.every(w=>!/[\s]$/.test(w.text));
+        text='<span class="fp-line-words">'+timedWords.map((w,j)=>
+          '<span class="fp-word" data-word-start="'+Number(w.start)+
+          '" data-word-end="'+Number(w.end)+'">'+esc(w.text)+(needsSpacing&&j<timedWords.length-1?' ':'')+'</span>'
+        ).join('')+'</span>';
       }else{
+        // Ordinary LRC only has line timestamps: no fake word/line progress.
         text='<span class="fp-line-plain">'+esc(line.text)+'</span>';
       }
       return '<div class="fp-lyric" data-lyric-index="'+i+'" data-time="'+
