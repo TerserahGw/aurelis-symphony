@@ -1,51 +1,36 @@
-# Aurelis Symphony 2.0 API
+# Aurelis Symphony 2.1 API
 
-Base path: /api/v1 (HTTP JSON unless noted). Backend: Node.js 22.
+**Runtime:** Node.js 22. **Discovery:** youtubei.js 18.3.0 (unofficial). **Player:** HTML5 Audio (no iframe). Experimental external streaming may fail or conflict with source terms.
 
-| Method | Path | Function |
+| Method | Endpoint | Response |
 | --- | --- | --- |
-| GET | /health | Health, current version 2.0.0 |
-| GET | /config | Capabilities and current backend |
-| GET | /catalog?q=&limit= | Bundled playable music |
-| GET | /tracks/:id | Bundled track lookup |
-| GET | /search?provider=youtube&q=&limit=20 | YouTube music metadata, not raw audio |
-| GET | /recommendations?track=&artist=&exclude=&limit=12 | Related search suggestions (not personalized) |
-| GET | /info?url= | Safe YouTube embed descriptor; audio array always empty |
-| GET | /lyrics/sources | LRCLIB, lyrics.ovh capabilities |
-| GET | /lyrics?track=&artist=&duration=&source= | Best-effort lyric lines |
-| GET | /lyrics/all?track=&artist= | Both lyric sources |
-| GET | /lyrics/lrc?track=&artist= | LRC text |
-| GET | /openapi.json | API OpenAPI spec |
-| GET, PUT | /library | Optional bearer-token cloud library |
+| GET | /api/v1/health | ok, version 2.1.0, playback kind |
+| GET | /api/v1/config | discovery, providers, directAudio |
+| GET | /api/v1/catalog | original demo tracks |
+| GET | /api/v1/tracks/:id | original track by ID |
+| GET | /api/v1/search?provider=youtube&q=... | YouTube.js metadata only |
+| GET | /api/v1/recommendations?track=&artist=&exclude= | related-search suggestions |
+| GET | /api/v2/home | home recommendations or local fallback |
+| GET | /api/v2/status | experimental directAudio settings and current stream count |
+| GET/HEAD | /api/v2/audio/:videoId | unverified direct audio stream; 200/206, 403/502/503 |
+| GET | /api/v1/info?url=... | audio descriptor without raw third-party URL |
+| GET | /api/v1/lyrics/sources | LRCLIB / lyrics.ovh |
+| GET | /api/v1/lyrics | best matching lyrics |
+| GET | /api/v1/lyrics/all | all lyric sources |
+| GET | /api/v1/lyrics/lrc | LRC text |
+| GET/PUT | /api/v1/library | optional cloud library sync |
 
-GET /api/tracks remains an alias for catalog. All timestamps are seconds.
+The experimental audio proxy:
+- accepts only valid 11-character YouTube video IDs
+- allows only HTTPS googlevideo.com destinations; rejects other hosts
+- does not decrypt DRM or bypass authentication, paywalls, consent, access controls, or token requirements
+- uses a small capped number of concurrent streams
+- forwards HTTP byte ranges only when the upstream confirms 206
+- never exposes extracted URLs directly through the JSON API
+- may return 502 / unsupported_delivery / upstream_range_unsupported / upstream_restricted if the provider cannot serve a direct compatible stream
 
-### Playback separation
+The YouTube.js decoder evaluator is **disabled by default**. Enabling AURELIS_STREAM_EVAL=true runs upstream decipher script using a documented dynamic JavaScript evaluator; understand its security implications first. This does not guarantee success.
 
-For YouTube results, the track URL is a youtube.com/watch?v=... link and playback.mode is official-embed. Do not pass video metadata into a raw audio proxy. The browser opens the YouTube IFrame API; if embedding is disabled, the user must open the content at the source.
+YouTube's developer policies restrict isolated audio playback from YouTube content. For a compliant public service, use your own recordings, properly licensed audio, or an authorized integration. Search results do not provide redistribution rights.
 
-For bundled audio tracks, the audio property points to a hosted demo MP3 and supports Range 206 requests. You can add your own original/licensed tracks to src/main/resources/web/catalog.json before rebuilding.
-
-### Search limitations
-
-Default discovery uses youtubei.js 18.3.0 and may be restricted by network/IP/rate limits or API changes. Optional SEARCH_BACKEND=official requires YOUTUBE_API_KEY and the official YouTube Data API v3, which searches videos, not playable audio streams. A 503 indicates unavailable discovery, not a playable link.
-
-The recommendation endpoint searches related terms and is not a personal/collaborative ranking engine.
-
-### Lyrics
-
-Sources: lrclib (best-effort synchronized lyrics) and lyricsovh (plain text). Response shape remains:
-    { "result": { "source": "lrclib", "track": {...}, "synced": true, "wordLevel": false, "lines": [{"time": 12.5, "endTime": 14.3, "text": "...", "words": []}] }, "attempts": [...] }
-
-Word-level karaoke is only available when provider data supports it. Live endpoints can fail.
-
-### Cloud library
-
-Disabled by default. Enable with AURELIS_CLOUD_LIBRARY=true and persistent storage. Each client uses a random 64-character hexadecimal bearer token. GET/PUT data stored under SHA-256-derived filenames, 100 KB max per write. There is no password recovery, dedicated account system, or shared playlists.
-
-### Safety
-
-- Allowlisted HTTPS YouTube URLs in /info.
-- No arbitrary URL fetch/proxy endpoints.
-- Input length and response limits; per-IP basic request throttling.
-- Server-bound API keys; use HTTPS and upstream rate limits for public hosting.
+Local and personal-library routes remain backward compatible with Aurelis 2.0. No password login or advanced collaborative recommendations in this release.
