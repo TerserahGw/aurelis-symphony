@@ -4,15 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#090b10">
-  <meta name="description" content="Aurelis Symphony 2.5.0 — Temukan musik, dengarkan, buat playlist, dan nikmati lirik sinkron dalam satu pengalaman.">
+  <meta name="description" content="Aurelis Symphony 2.6.0 — Temukan musik, dengarkan, buat playlist, dan nikmati lirik sinkron dalam satu pengalaman.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/assets/aurelis.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/v21.css?v=2.5.0">
-  <link rel="stylesheet" href="/assets/full-player.css?v=2.5.0">
-  <link rel="stylesheet" href="/assets/preferences.css?v=2.5.0">
-  <link rel="stylesheet" href="/assets/lyrics-v23.css?v=2.5.0">
-  <link rel="stylesheet" href="/assets/glass-v24.css?v=2.5.0">
-  <link rel="stylesheet" href="/assets/glass-v25.css?v=2.5.0">
+  <link rel="stylesheet" href="/assets/v21.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/full-player.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/preferences.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/lyrics-v23.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/glass-v24.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/glass-v25.css?v=2.6.0">
+  <link rel="stylesheet" href="/assets/island-v26.css?v=2.6.0">
   <title>Aurelis Symphony — Music, your way</title>
 </head>
 <body>
@@ -21,7 +22,7 @@
       <button class="brand" data-nav="home" aria-label="Beranda Aurelis">
         <span class="brand-mark">✦</span>
         <span class="brand-copy"><strong>Aurelis</strong><small>SYMPHONY</small></span>
-        <span class="version">2.5.0</span>
+        <span class="version">2.6.0</span>
       </button>
       <div class="sidebar-section">
         <div class="sidebar-label">MENU UTAMA</div>
@@ -31,8 +32,7 @@
       </div>
       <div class="sidebar-section">
         <div class="sidebar-label">MUSIK KAMU</div>
-        <button class="nav-button" data-nav="liked"><i data-i="heart"></i> <span>Lagu Disukai</span></button>
-        <button class="nav-button" data-nav="recent"><i data-i="clock"></i> <span>Baru Diputar</span></button>
+        
         <div class="playlist-title"><span>PLAYLIST</span><button class="circle-mini" id="newPlaylistSide" aria-label="Buat playlist baru"><i data-i="plus"></i></button></div>
         <div id="sidePlaylists" class="side-playlists"></div>
       </div>
@@ -59,7 +59,7 @@
 
       <div class="scroll-area" id="scrollArea">
         <div id="view" class="view-content" aria-live="polite"></div>
-        <footer class="app-footer"><span>✦ Aurelis Symphony 2.5.0</span><span>Find your frequency.</span></footer>
+        <footer class="app-footer"><span>✦ Aurelis Symphony 2.6.0</span><span>Find your frequency.</span></footer>
       </div>
     </main>
 
@@ -102,11 +102,25 @@
     <div class="mobile-progress"><div id="mobileProgress"></div></div>
   </div>
 
-  <nav class="mobile-nav" aria-label="Navigasi mobile">
-    <button data-nav="home" class="active"><i data-i="home"></i><span>Beranda</span></button>
-    <button data-nav="search"><i data-i="search"></i><span>Cari</span></button>
-    <button data-nav="library"><i data-i="library"></i><span>Koleksi</span></button>
-    <button data-nav="liked"><i data-i="heart"></i><span>Disukai</span></button>
+  <nav id="mobileIslandDock" class="mobile-nav" aria-label="Navigasi mobile">
+    <div class="island-nav" role="group" aria-label="Navigasi utama">
+      <button data-nav="home" class="active"><i data-i="home"></i><span>Home</span></button>
+      <button data-nav="search"><i data-i="search"></i><span>Search</span></button>
+      <button data-nav="library"><i data-i="library"></i><span>Library</span></button>
+      <button id="islandMenuTrigger" class="island-hamburger" aria-label="Tutup pencarian, tampilkan navigasi" aria-expanded="false" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+    <div class="island-search">
+      <button id="islandSearchTrigger" class="island-search-trigger" type="button" aria-label="Cari musik" aria-expanded="false" aria-controls="islandSearchForm"><i data-i="search"></i></button>
+      <form id="islandSearchForm" class="island-search-form" role="search" aria-hidden="true">
+        <i class="search-inline-icon" data-i="search"></i>
+        <input id="islandSearchInput" type="search" aria-label="Cari lagu dan artis" placeholder="Cari lagu atau artis..." autocomplete="off" enterkeyhint="search" spellcheck="false" tabindex="-1">
+        <button id="islandSearchClear" class="island-search-clear" type="button" aria-label="Hapus pencarian" tabindex="-1"><i data-i="x"></i></button>
+      </form>
+    </div>
   </nav>
 
   <div id="scrim" class="scrim" hidden></div>
@@ -121,9 +135,10 @@
   </dialog>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <audio id="audio" preload="metadata"></audio>
-  <script src="/assets/v21.js?v=2.5.0" defer></script>
-  <script src="/assets/full-player.js?v=2.5.0" defer></script>
-  <script src="/assets/preferences.js?v=2.5.0" defer></script>
-  <script src="/assets/media-session.js?v=2.5.0" defer></script>
+  <script src="/assets/v21.js?v=2.6.0" defer></script>
+  <script src="/assets/full-player.js?v=2.6.0" defer></script>
+  <script src="/assets/preferences.js?v=2.6.0" defer></script>
+  <script src="/assets/media-session.js?v=2.6.0" defer></script>
+  <script src="/assets/island-v26.js?v=2.6.0" defer></script>
 </body>
 </html>
