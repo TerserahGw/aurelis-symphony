@@ -167,6 +167,7 @@ function open(){
   shell.querySelector('#aspClose')?.focus();
 }
 function close(){
+  window.AurelisMotion?.settingsClosing?.(shell);
   shell.hidden=true;
   beforeFocus?.focus?.();
 }
