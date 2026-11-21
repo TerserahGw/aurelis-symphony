@@ -9,6 +9,7 @@ on:
       - src/main/resources/web/assets/preferences.js
       - src/main/resources/web/assets/preferences.css
       - src/main/resources/web/assets/lyrics-v23.css
+      - src/main/resources/web/assets/ambient-glass.css
       - src/main/resources/web/assets/docs.js
       - src/main/resources/web/docs/api.html
       - src/main/resources/web/index.html
@@ -48,6 +49,19 @@ jobs:
             await page.locator('#playerTrack').click({timeout:10000});
             await page.waitForSelector('#fullPlayer.open',{timeout:8000});
             if(!await page.locator('#fpLyricsPane').isVisible())throw new Error('Lyrics not shown');
+            // Use the original local demo instead of relying on live YouTube
+            // or third-party lyric endpoints in browser smoke tests.
+            const demo=await (await page.request.get('http://127.0.0.1:18080/api/v1/catalog')).json();
+            await page.evaluate(track=>window.Aurelis.play(track),demo.tracks[0]);
+            await page.waitForFunction(()=>window.Aurelis.snapshot().lyrics?.lines?.length>0,{timeout:8000});
+            await page.locator('#fpLyricsPane .fp-line-plain').first().waitFor({state:'visible',timeout:5000});
+            if(await page.locator('#fpLyricsPane .fp-line-progress').count())throw new Error('Fake progress rendered for line-only LRC');
+            await page.evaluate(()=>{
+              const l=window.Aurelis.snapshot().lyrics,first=l.lines[0];
+              first.words=[{text:first.text,start:0,end:1}];
+              window.dispatchEvent(new Event('aurelis:lyrics'));
+            });
+            await page.locator('#fpLyricsPane .fp-word').first().waitFor({state:'visible',timeout:5000});
             await page.locator('#fpQueueTab').click();
             if(!await page.locator('#fpAutoSwitch').isVisible())throw new Error('Queue/autoplay not shown');
             const old=await page.locator('#fpAutoSwitch').getAttribute('aria-checked');
@@ -75,6 +89,8 @@ jobs:
             await page.locator('#fullPlayer').waitFor({state:'hidden',timeout:4500});
             await page.locator('#settingsButton').click();
             await page.locator('#aurelisPreferences').waitFor({state:'visible',timeout:5000});
+            const panelFilter=await page.locator('.asp-panel').evaluate(el=>getComputedStyle(el).backdropFilter);
+            if(!panelFilter||panelFilter==='none')throw new Error('Preferences glass blur not applied');
             await page.locator('[data-tab=lyrics]').click();
             await page.locator('[data-range=lyricOffset]').evaluate(el=>{el.value='0.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
             if(!(await page.locator('[data-output=lyricOffset]').textContent()).includes('0.5'))throw new Error('Lyric offset setting did not apply');
@@ -84,6 +100,8 @@ jobs:
             await page.locator('#aspClose').click();
             await page.locator('.music-card .card-more').first().click({timeout:10000});
             await page.locator('#trackPopover').waitFor({state:'visible',timeout:4000});
+            const popFilter=await page.locator('#trackPopover').evaluate(el=>getComputedStyle(el).backdropFilter);
+            if(!popFilter||popFilter==='none')throw new Error('Song popover glass blur not applied');
             if(await page.locator('#trackPopover').evaluate(el=>el.getBoundingClientRect().width)>285)throw new Error('Song popover too large');
             await page.locator('#trackPopover [data-menu=offset-plus]').click();
             if(!(await page.locator('#popOffsetValue').textContent()).includes('0.25'))throw new Error('Song offset failed');
@@ -128,6 +146,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aurelis-2-3-1-player-screenshots
+          name: aurelis-2-4-player-glass-screenshots
           path: /tmp/aurelis-*.png
           if-no-files-found: ignore
