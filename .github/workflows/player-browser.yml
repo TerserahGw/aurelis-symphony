@@ -173,6 +173,7 @@ jobs:
               getComputedStyle(el).backdropFilter||getComputedStyle(el).webkitBackdropFilter);
             if(!settingsGlass.includes('blur'))throw new Error('Settings not frosted glass');
             await page.locator('[data-tab=lyrics]').click();
+            if(!await page.locator('[data-select=romanLanguage]').isVisible())throw new Error('CJK romanization language selector missing');
             await page.locator('[data-range=lyricOffset]').evaluate(el=>{el.value='0.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
             if(!(await page.locator('[data-output=lyricOffset]').textContent()).includes('0.5'))throw new Error('Lyric offset setting did not apply');
             await page.locator('[data-tab=data]').click();
@@ -205,6 +206,20 @@ jobs:
             if(!lyricDownload.suggestedFilename().endsWith('.lrc'))throw new Error('Synced lyric did not download as LRC');
             await page.goto('http://127.0.0.1:18080/docs/api',{waitUntil:'domcontentloaded'});
             await page.locator('.docs-endpoint').first().waitFor();
+            if(!await page.locator('#streamWorkbench').isVisible())throw new Error('Streaming guide missing');
+            if(!await page.locator('#docsFilter').isVisible())throw new Error('Endpoint filter missing');
+            await page.locator('#streamTrackInput').fill('demo-aether');
+            await page.locator('#streamWorkbench button[type=submit]').click();
+            await page.waitForFunction(()=>!document.getElementById('streamListen').disabled,null,{timeout:10000});
+            const resolved=await page.locator('#streamResult').textContent();
+            if(!resolved.includes('/demo/aether-bloom.mp3'))throw new Error('Demo audio resolver failed');
+            await page.locator('#streamListen').click();
+            const previewSrc=await page.locator('#streamPreview').getAttribute('src');
+            if(!previewSrc?.includes('/demo/aether-bloom.mp3'))throw new Error('Audio preview not connected');
+            await page.locator('#streamPreview').evaluate(el=>el.pause());
+            await page.locator('#docsFilter').fill('romanize');
+            if(!await page.locator('#romanize').isVisible())throw new Error('Romanize endpoint not searchable');
+            await page.locator('#docsFilter').fill('');
             await page.locator('[data-try=health]').scrollIntoViewIfNeeded();
             await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'-docs.png'});
             console.log('Docs geometry', await page.evaluate(()=>{
