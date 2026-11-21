@@ -54,25 +54,40 @@ export function inferStyle(current={},recent=[],hint='') {
 function artistLike(a,b) {
   const x=singer(a),y=singer(b);return !!x && !!y && (x===y || (x.length>=6&&y.startsWith(x+' ')));
 }
+// Music-first filtering: don't turn a search for an artist into a podcast,
+// compilation, mashup, tutorial or slowed/sped-up duplicate.
+const UNWANTED = /\b(reaction|interview|documentary|tutorial|podcast|full album|1 hour|10 hours|playlist|compilation|mashup|nightcore|sped\s*up|slowed|reverb|karaoke|bass boosted|looped|8d audio|trailer|teaser|fanmade)\b/i;
 function playable(t) {
   if(!t?.id||!t?.title)return false;
-  if(t.duration>0&&(t.duration<55||t.duration>700))return false;
-  const lower=String(t.title||'').toLowerCase();
-  return !/\b(reacts?|reaction|interview|documentary|tutorial|full album|1 hour|10 hours|playlist|compilation)\b/.test(lower);
+  if(t.duration>0&&(t.duration<70||t.duration>540))return false;
+  if(UNWANTED.test(String(t.title)))return false;
+  return true;
 }
 function contextRows(input) {
   return (Array.isArray(input)?input:[]).slice(0,12).filter(x=>x && typeof x==='object')
     .map(x=>({title:String(x.title||'').slice(0,150),artist:String(x.artist||'').slice(0,100),
-      id:String(x.id||'').slice(0,60)}));
+      album:String(x.album||'').slice(0,120),id:String(x.id||'').slice(0,60)}));
+}
+function styleAffinity(t,style){
+  const text=[t?.title,t?.album,t?.artist].join(' ').toLowerCase();
+  const tags=STYLES[style]||[];
+  return Math.min(3,tags.reduce((count,tag)=>count+(text.includes(tag)?1:0),0));
+}
+function artistBonus(t,recent,liked,mode){
+  const likedMatch=liked.some(x=>artistLike(t,x));
+  const recentMatch=recent.some(x=>artistLike(t,x));
+  return (likedMatch?(mode==='discover'?.7:3.3):0)
+    +(recentMatch?(mode==='familiar'?1.8:.8):0);
 }
 export function rankRadio(candidates,options={}) {
   const current=options.current||{};
   const recent=contextRows(options.recent);
+  const liked=contextRows(options.liked);
   const queued=contextRows(options.queued);
-  const forbidden=[current,...recent.slice(0,7),...queued];
+  const forbidden=[current,...recent.slice(0,10),...queued];
   const seenIds=new Set(forbidden.map(x=>x.id).filter(Boolean));
   const mode=['familiar','balanced','discover'].includes(options.mode)?options.mode:'balanced';
-  const style=options.style||inferStyle(current,recent,options.hint);
+  const style=options.style||inferStyle(current,[...liked,...recent],options.hint);
   const perArtist=new Map(),seenSongs=[];
   const list=(candidates||[]).filter(playable).filter(x=>{
     if(seenIds.has(x.id))return false;
@@ -80,14 +95,20 @@ export function rankRadio(candidates,options={}) {
     return true;
   }).map((x,i)=>{
     const currentArtist=artistLike(x,current);
-    const historic=recent.filter(r=>artistLike(x,r)).length;
-    const title=String(x.title||'').toLowerCase();
-    const styleHits=(STYLES[style]||[]).filter(k=>title.includes(k)||String(x.album||'').toLowerCase().includes(k)).length;
-    const sameArtistWeight=mode==='familiar'?6:mode==='balanced'?2.5:-3.5;
-    const unseen=recent.every(r=>!artistLike(x,r));
-    const score=(options.provenance?.[x.id]||0)*3+(currentArtist?sameArtistWeight:0)
-      +Math.min(2,historic)*1.4+Math.min(2,styleHits)*2.4+(unseen&&mode==='discover'?3:0)
-      -(x.duration===0?.4:0)-(i*.025);
+    const duration=Number(x.duration)||0;
+    const quality=duration>=125&&duration<=360?1.1:(duration>0&&duration<=480?.25:-.8);
+    const styled=styleAffinity(x,style);
+    const knownProfile=artistBonus(x,recent,liked,mode);
+    const familiar=mode==='familiar'?3.5:mode==='balanced'?1.4:-2.3;
+    // The search itself supplies most relevance; context is a bounded rerank,
+    // never claimed to be Spotify-style acoustic embeddings or BPM analysis.
+    const provenance=Number(options.provenance?.[x.id])||0;
+    const score=provenance*3.4+
+      (currentArtist?familiar:0)+
+      knownProfile+
+      styled*2.1+quality+
+      (String(x.album||'').trim().length>2?.5:0)-
+      (i*.012);
     return {...x,_score:score};
   }).sort((a,b)=>b._score-a._score || String(a.id).localeCompare(String(b.id)));
   const output=[];
@@ -101,35 +122,38 @@ export function rankRadio(candidates,options={}) {
     output.push(clean);
     return true;
   }
-  for(const track of list){ if(output.length>=(options.limit||12))break; add(track,maxArtist); }
-  if(output.length<Math.min(5,options.limit||12))
+  for(const track of list){if(output.length>=(options.limit||12))break;add(track,maxArtist);}
+  if(output.length<Math.min(6,options.limit||12))
     for(const track of list){if(output.length>=(options.limit||12))break;add(track,2);}
   return output;
 }
-export async function createRadio({search,current={},recent=[],queued=[],hint='',mode='balanced',limit=12}) {
-  const context=contextRows(recent);
-  const artist=String(current.artist||context[0]?.artist||'').trim().replace(/ - Topic$/i,'').slice(0,75);
-  const recentArtist=String(context.find(x=>cleanArtist(x.artist)!==cleanArtist(artist))?.artist||'').slice(0,70);
-  const style=inferStyle(current,context,hint);
-  const sanitizedHint=String(hint||'').replace(/[^\w \u3040-\u30ff-]/g,'').slice(0,45).trim();
+export async function createRadio({search,current={},recent=[],liked=[],queued=[],hint='',mode='balanced',limit=12}) {
+  const context=contextRows(recent),likedRows=contextRows(liked);
+  const artist=String(current.artist||context[0]?.artist||likedRows[0]?.artist||'').trim().replace(/ - Topic$/i,'').slice(0,70);
+  const previousArtist=String([...likedRows,...context].find(x=>
+    cleanArtist(x.artist)&&cleanArtist(x.artist)!==cleanArtist(artist))?.artist||'').slice(0,70);
+  const style=inferStyle(current,[...likedRows,...context],hint);
+  const mood=String(hint||'').replace(/[^\p{L}\p{N} -]/gu,'').trim().slice(0,48);
+  // Queries target SONGS, not playlists or the exact title of the current
+  // recording. Multiple independent seeds avoid a generic, repetitive Up Next.
   const searches=[
-    [artist ? artist+' radio similar artists songs' : style+' songs mix', 2.0],
-    [sanitizedHint ? sanitizedHint+' similar vibe songs' : style+' '+(mode==='discover'?'underrated artists':'songs')+' mix',1.35],
-    [recentArtist ? recentArtist+' '+style+' related music' : style+' alternative artists best songs',1.2]
+    [artist ? artist+' similar artists songs official audio' : style+' songs official audio',2.15],
+    [(mood||style)+' songs official audio',1.8],
+    [previousArtist ? previousArtist+' similar songs official audio' : style+' new artists official audio',1.45]
   ];
   const unique=[...new Map(searches.map(([q,w])=>[q.toLowerCase(),[q,w]])).values()];
-  const outcomes=await Promise.allSettled(unique.map(([q])=>search(q,20)));
+  const outcomes=await Promise.allSettled(unique.map(([q])=>search(q,22)));
   const pool=new Map(),provenance={};
   outcomes.forEach((result,index)=>{
-    if(result.status!=='fulfilled')return;
+    if(result.status!=='fulfilled'||!Array.isArray(result.value))return;
     const weight=unique[index][1];
     for(const [i,t] of result.value.entries()){
       if(!t?.id)continue;
       if(!pool.has(t.id))pool.set(t.id,t);
-      provenance[t.id]=(provenance[t.id]||0)+(weight*(1-i/45));
+      provenance[t.id]=(provenance[t.id]||0)+weight*(1-i/42);
     }
   });
-  return {style,strategy:'artist-and-vibe-radio-v1',personalized:false,
+  return {style,strategy:'artist-profile-and-mood-radio-v2',personalized:likedRows.length>0||context.length>0,
     searched:outcomes.filter(x=>x.status==='fulfilled').length,
-    tracks:rankRadio([...pool.values()],{current,recent:context,queued,hint,style,mode,limit,provenance})};
+    tracks:rankRadio([...pool.values()],{current,recent:context,liked:likedRows,queued,hint,style,mode,limit,provenance})};
 }
