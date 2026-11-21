@@ -1,63 +1,51 @@
-# Aurelis Symphony v1 API
+# Aurelis Symphony 2.0 API
 
-Base path: `/api/v1`. JSON responses unless otherwise noted. Query strings are UTF-8 encoded. All times for lyrics are floating-point **seconds**.
+Base path: /api/v1 (HTTP JSON unless noted). Backend: Node.js 22.
 
-| Method | Endpoint | Description |
+| Method | Path | Function |
 | --- | --- | --- |
-| GET | `/health` | Instance health and version |
-| GET | `/config` | Available providers and cloud setting |
-| GET | `/catalog?q=&limit=40` | Browse bundled playable tracks |
-| GET | `/tracks/:id` | Get one bundled track |
-| GET | `/search?q=&provider=youtube` | Search remote music metadata via NewPipe |
-| GET | `/info?url=https://...` | Inspect stream details, selectable audio URLs |
-| GET | `/lyrics/sources` | Provider capabilities and IDs |
-| GET | `/lyrics?track=&artist=&duration=&source=` | Best matching lyrics and provider attempts |
-| GET | `/lyrics/all?track=&artist=&duration=` | Compare providers |
-| GET | `/lyrics/lrc?track=&artist=&format=enhanced` | Plain or enhanced LRC text |
-| GET | `/openapi.json` | OpenAPI specification |
-| GET | `/library` | Optional token-private library document |
-| PUT | `/library` | Replace optional private document atomically |
+| GET | /health | Health, current version 2.0.0 |
+| GET | /config | Capabilities and current backend |
+| GET | /catalog?q=&limit= | Bundled playable music |
+| GET | /tracks/:id | Bundled track lookup |
+| GET | /search?provider=youtube&q=&limit=20 | YouTube music metadata, not raw audio |
+| GET | /recommendations?track=&artist=&exclude=&limit=12 | Related search suggestions (not personalized) |
+| GET | /info?url= | Safe YouTube embed descriptor; audio array always empty |
+| GET | /lyrics/sources | LRCLIB, lyrics.ovh capabilities |
+| GET | /lyrics?track=&artist=&duration=&source= | Best-effort lyric lines |
+| GET | /lyrics/all?track=&artist= | Both lyric sources |
+| GET | /lyrics/lrc?track=&artist= | LRC text |
+| GET | /openapi.json | API OpenAPI spec |
+| GET, PUT | /library | Optional bearer-token cloud library |
 
-### Search providers
+GET /api/tracks remains an alias for catalog. All timestamps are seconds.
 
-`catalog`, `youtube`, `soundcloud`, `bandcamp`, `peertube`, `mediaccc`.
+### Playback separation
 
-The remote search backend requires the NewPipeExtractor runtime. It gives a list of metadata objects with `id`, `url`, `title`, `artist`, `duration`, `artwork`, `provider`, and `type`. To attempt playback, call `/info?url=...`. A stream may not be compatible with the browser or available in the current region; no audio proxy is supplied.
+For YouTube results, the track URL is a youtube.com/watch?v=... link and playback.mode is official-embed. Do not pass video metadata into a raw audio proxy. The browser opens the YouTube IFrame API; if embedding is disabled, the user must open the content at the source.
 
-### Lyrics providers
+For bundled audio tracks, the audio property points to a hosted demo MP3 and supports Range 206 requests. You can add your own original/licensed tracks to src/main/resources/web/catalog.json before rebuilding.
 
-`lrclib`, `netease`, `qq`, `kugou`, `musixmatch`, `genius`, `lyricsovh`. Omit `source` for an automatic best-match across providers (priority: word-level → line sync → plain lyrics). Unofficial endpoints may stop working at any time.
+### Search limitations
 
-Example:
+Default discovery uses youtubei.js 18.3.0 and may be restricted by network/IP/rate limits or API changes. Optional SEARCH_BACKEND=official requires YOUTUBE_API_KEY and the official YouTube Data API v3, which searches videos, not playable audio streams. A 503 indicates unavailable discovery, not a playable link.
 
-```http
-GET /api/v1/lyrics?track=Another%20Love&artist=Tom%20Odell
-```
+The recommendation endpoint searches related terms and is not a personal/collaborative ranking engine.
 
-```json
-{
-  "result": {
-    "source": "provider-id",
-    "track": {"title": "...", "artist": "...", "album": "...", "duration": 0},
-    "synced": true,
-    "wordLevel": true,
-    "instrumental": false,
-    "lines": [
-      {"time": 12.5, "endTime": 15.0, "text": "...", "translation": "...", "words": [{"text":"...", "start":12.5, "end":13.0}]}
-    ]
-  },
-  "attempts": [{"source":"lrclib","ok":true,"wordLevel":true}]
-}
-```
+### Lyrics
 
-Timestamps and lyrics above are **schema illustrations**, not a claim about a real track.
+Sources: lrclib (best-effort synchronized lyrics) and lyricsovh (plain text). Response shape remains:
+    { "result": { "source": "lrclib", "track": {...}, "synced": true, "wordLevel": false, "lines": [{"time": 12.5, "endTime": 14.3, "text": "...", "words": []}] }, "attempts": [...] }
+
+Word-level karaoke is only available when provider data supports it. Live endpoints can fail.
 
 ### Cloud library
 
-Disabled by default. Set `AURELIS_CLOUD_LIBRARY=true`. Each client generates its own 32-byte random token encoded as 64 lowercase hex characters. Send it as `Authorization: Bearer TOKEN` on GET/PUT. Stored JSON is entirely client-defined and limited to 100 KiB per PUT. No server accounts or password reset are implemented: losing the token means losing access to the server-side document. The endpoint is not meant to store private or sensitive data without further authentication/security review.
+Disabled by default. Enable with AURELIS_CLOUD_LIBRARY=true and persistent storage. Each client uses a random 64-character hexadecimal bearer token. GET/PUT data stored under SHA-256-derived filenames, 100 KB max per write. There is no password recovery, dedicated account system, or shared playlists.
 
-### Errors and limits
+### Safety
 
-`400` invalid parameters, `401` missing/invalid library token, `403` cloud library disabled, `404` missing resource/lyrics, `405` invalid method, `413` oversized payload, `429` basic per-IP request throttle, `502` internal/upstream errors, `503` NewPipe unavailable. External lyric provider failures are reported per-provider in `attempts` and often return `200` with a null result.
-
-The server bounds inputs and uses fixed outbound service endpoints. For high-traffic public deployment use a reverse proxy/WAF, structured monitoring, TLS and persistent storage.
+- Allowlisted HTTPS YouTube URLs in /info.
+- No arbitrary URL fetch/proxy endpoints.
+- Input length and response limits; per-IP basic request throttling.
+- Server-bound API keys; use HTTPS and upstream rate limits for public hosting.
