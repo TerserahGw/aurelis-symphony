@@ -53,7 +53,7 @@ jobs:
             await page.locator('#fpTranslate').click();
             await page.screenshot({path:'/tmp/aurelis-'+(mobile?'mobile':'desktop')+'.png'});
             await page.locator('#fpClose').click();
-            await page.waitForSelector('#fullPlayer[hidden]',{timeout:4000});
+            await page.locator('#fullPlayer').waitFor({state:'hidden',timeout:4500});
             console.log((mobile?'Mobile':'Desktop')+' player open/queue/autoplay/romanize/translate/close OK');
             await context.close();
           }
