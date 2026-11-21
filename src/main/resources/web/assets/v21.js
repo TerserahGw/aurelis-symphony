@@ -596,7 +596,9 @@ function showTrackMenu(t,anchor){
   const offset=Number(read('songLyricOffsets',{})[t.id]||0);
   const option=(action,label,icon)=>'<button role="menuitem" class="pop-btn" data-menu="'+action+
     '">'+ic(icon)+'<span>'+esc(label)+'</span></button>';
-  let html='<div class="pop-title"><strong>'+esc(t.title||'Lagu')+'</strong><small>'+esc(t.artist||'')+'</small></div>';
+  const ambientArt=typeof t.artwork==='string' && /^https:\/\//i.test(t.artwork)?t.artwork:'';
+  let html=ambientArt?'<div class="pop-ambient" aria-hidden="true"><img src="'+esc(ambientArt)+'" alt="" referrerpolicy="no-referrer"></div>':'';
+  html+='<div class="pop-title"><strong>'+esc(t.title||'Lagu')+'</strong><small>'+esc(t.artist||'')+'</small></div>';
   html+=option('play','Putar sekarang','play');
   html+=option('next','Putar berikutnya','skip-forward');
   html+=option('queue','Tambahkan ke antrean','list');
