@@ -49,7 +49,7 @@ const state = {
   current: null, shuffle: read('shuffle', false), repeat: Number(read('repeat', 0)) || 0,
   drawer: '', lyrics: null, lyricsSource: '', lyricsIndex: -1, loading: false,
   searching: false, sequence: 0, playSequence: 0, lyricSequence: 0, panelError: '',
-  menuTrack: null, initial: true, playedCycle: []
+  menuTrack: null, initial: true, playedCycle: [], librarySection:'all'
 };
 const TRACK_LIMIT = 240;
 const trackPopover=document.createElement('div');
@@ -222,7 +222,7 @@ function hero() {
 function homeView() {
   const featured = uniq(state.home.length ? state.home : state.catalog);
   const recentTracks = uniq(state.history.map(trackById).filter(Boolean));
-  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.3.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
+  return '<div class="eyebrow">DISCOVER · AURELIS 2.6</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
     '<p class="subheading">Temukan lagu, buat playlist, dan dengarkan dengan pemutar audio Aurelis.</p>' +
     hero() + chips() +
     section('Pilihan untukmu', state.loading ? skeleton() : cards(featured, 12), 'DENGARKAN SEKARANG',
@@ -233,7 +233,7 @@ function homeView() {
 }
 function searchView() {
   const title = state.query ? 'Hasil pencarian' : 'Jelajahi musik';
-  const subtitle = state.query ? 'Menampilkan musik untuk “' + esc(state.query) + '”' : 'Coba genre favoritmu atau ketik judul lagu di atas.';
+  const subtitle = state.query ? 'Menampilkan musik untuk “' + esc(state.query) + '”' : 'Pilih suasana musik atau gunakan capsule pencarian.';
   return '<div class="heading-page"><div class="eyebrow">EXPLORE THE SOUND</div><h1>' + title +
     '</h1><p>' + subtitle + '</p></div>' + chips() +
     (state.searching ? skeleton(8) : state.results.length
@@ -242,13 +242,30 @@ function searchView() {
         : section('Mulai dari sini', cards(state.home.length ? state.home : state.catalog, 12), 'REKOMENDASI'));
 }
 function libraryView() {
-  return '<div class="heading-page"><div class="eyebrow">YOUR COLLECTION</div><h1>Koleksi musikmu</h1><p>Semua yang kamu simpan, ada di sini.</p></div>' +
-    section('Playlist kamu', '<div class="playlist-grid"><button class="playlist-card create" data-action="new-playlist"><span class="playlist-cover">' +
-      ic('plus') + '</span><strong>Buat playlist</strong><small>Koleksi baru</small></button>' +
-      state.playlists.map(p => '<button class="playlist-card" data-action="open-playlist" data-id="' + esc(p.id) +
-        '"><span class="playlist-cover">♫</span><strong>' + esc(p.name) + '</strong><small>' +
-        (p.tracks || []).length + ' lagu</small></button>').join('') + '</div>', 'YOUR PLAYLISTS') +
-    section('Aurelis Originals', cards(state.catalog, 8), 'LAGU SIAP DIPUTAR');
+  const liked=uniq([...state.favorite].map(trackById).filter(Boolean));
+  const history=uniq(state.history.map(trackById).filter(Boolean));
+  const sectionName=state.librarySection||'all';
+  const tabs=[['all','Semua'],['playlists','Playlist'],['liked','Disukai'],['history','History']];
+  const tabNav='<nav class="library-tabs" aria-label="Kategori Library">'+
+    tabs.map(([key,label])=>'<button type="button" data-action="library-tab" data-section="'+key+
+      '" class="'+(sectionName===key?'active':'')+'" aria-pressed="'+(sectionName===key)+'">'+label+'</button>').join('')+'</nav>';
+  const head='<div class="heading-page"><div class="eyebrow">YOUR SPACE · AURELIS LIBRARY</div>'+
+    '<h1>Library</h1><p>Playlist, lagu disukai, dan riwayat dalam satu tempat.</p></div>'+tabNav;
+  const playlistCards='<div class="playlist-grid"><button class="playlist-card create" data-action="new-playlist">'+
+    '<span class="playlist-cover">'+ic('plus')+'</span><strong>Buat playlist</strong><small>Koleksi baru</small></button>'+
+    state.playlists.map(p=>'<button class="playlist-card" data-action="open-playlist" data-id="'+esc(p.id)+'">'+
+      '<span class="playlist-cover">♫</span><strong>'+esc(p.name)+'</strong><small>'+
+      (p.tracks||[]).length+' lagu</small></button>').join('')+'</div>';
+  const playlistSection=section('Playlist kamu',playlistCards,'KUMPULAN MUSIK');
+  const likedSection=section('Lagu disukai',liked.length?rows(sectionName==='all'?liked.slice(0,6):liked):
+    empty('Belum ada lagu disukai','Ketuk hati di lagu favoritmu.'),'FAVORITES',
+    sectionName==='all'&&liked.length>6?'<button class="see-all" data-action="library-tab" data-section="liked">Lihat semua '+ic('arrow-right')+'</button>':'');
+  const historySection=section('Baru diputar',history.length?rows(sectionName==='all'?history.slice(0,6):history):
+    empty('Belum ada riwayat','Lagu yang kamu putar akan muncul di sini.'),'RECENTLY PLAYED',
+    sectionName==='all'&&history.length>6?'<button class="see-all" data-action="library-tab" data-section="history">Lihat semua '+ic('arrow-right')+'</button>':'');
+  return head+(sectionName==='all'?playlistSection+likedSection+historySection:
+    sectionName==='playlists'?playlistSection:
+    sectionName==='liked'?likedSection:historySection);
 }
 function playlistView() {
   const p = state.playlists.find(p => p.id === state.activePlaylist);
@@ -269,7 +286,12 @@ function simpleView(kind) {
     '</p></div>' + rows(tracks);
 }
 function render() {
-  all('[data-nav]').forEach(n => n.classList.toggle('active', n.dataset.nav === state.view));
+  const activeMain=['liked','recent','playlist','library'].includes(state.view)?'library':state.view;
+  all('[data-nav]').forEach(n => {
+    const active=n.dataset.nav===activeMain;
+    n.classList.toggle('active',active);
+    n.setAttribute('aria-current',active?'page':'false');
+  });
   const page = state.view === 'home' ? homeView() : state.view === 'search' ? searchView() :
     state.view === 'library' ? libraryView() : state.view === 'playlist' ? playlistView() :
     simpleView(state.view);
@@ -282,7 +304,8 @@ function renderSidePlaylists() {
     '">' + ic('disc') + ' ' + esc(p.name) + '</button>').join('');
 }
 function navigate(view, playlistId) {
-  state.view = view;
+  state.view=view;
+  if(view==='library')state.librarySection='all';
   if (view === 'playlist') state.activePlaylist = playlistId;
   if (view === 'search' && $('searchInput').value.trim()) state.query = $('searchInput').value.trim();
   render();
@@ -788,6 +811,12 @@ function handleClick(event) {
   else if (type === 'like') like(t);
   else if (type === 'menu') showTrackMenu(t,btn);
   else if (type === 'genre') openGenre(btn.dataset.term);
+  else if (type === 'library-tab') {
+    state.view='library';
+    state.librarySection=['all','playlists','liked','history'].includes(btn.dataset.section)?btn.dataset.section:'all';
+    render();
+    $('scrollArea').scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});
+  }
   else if (type === 'explore') { navigate('search'); $('searchInput').focus(); }
   else if (type === 'new-playlist') newPlaylist();
   else if (type === 'open-playlist') navigate('playlist', btn.dataset.id);
