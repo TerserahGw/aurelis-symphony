@@ -5,6 +5,7 @@ import { lookupYouTube } from '../server/youtube.mjs';
 import { parseLrc, lyricsToLrc } from '../server/lyrics.mjs';
 import { validSingleRange, allowedMediaHost } from '../server/stream.mjs';
 import { detectLyricLanguage, translateLyrics } from '../server/translation.mjs';
+import { normalizeAudius } from '../server/audius.mjs';
 
 test('YouTube URL whitelist', () => {
   assert.equal(lookupYouTube('https://youtube.com/watch?v=MwpMEbgC7DA')?.videoId, 'MwpMEbgC7DA');
@@ -36,6 +37,16 @@ test('translation language detection and strict input', async () => {
   const input=await translateLyrics({texts:['', ...Array(20).fill('x')], target:'id'});
   assert.equal(input.ok,false);
   assert.equal(input.code,'invalid_texts');
+});
+test('Audius permissions and safe playback descriptor', () => {
+  const item={ id:'V66vyPP',title:'Accessible Demo',is_streamable:true,is_stream_gated:false,
+    access:{stream:true},user:{name:'Independent Artist'} };
+  const playable=normalizeAudius(item);
+  assert.equal(playable?.provider,'audius');
+  assert.match(playable?.audio||'',/api\.audius\.co\/v1\/tracks\/V66vyPP\/stream/);
+  assert.equal(normalizeAudius({...item,access:{stream:false}}),null);
+  assert.equal(normalizeAudius({...item,is_stream_gated:true}),null);
+  assert.equal(normalizeAudius({...item,is_streamable:false}),null);
 });
 test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', async () => {
   const port = 19000 + Math.floor(Math.random() * 3000);
