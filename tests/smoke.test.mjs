@@ -91,11 +91,18 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.ok(sourceList.sources.some(x=>x.id==='musixmatch'));
     const docs=await fetch(base+'/docs/api');
     assert.equal(docs.status,200);
-    assert.match(await docs.text(),/API Reference/);
+    assert.match(await docs.text(),/Developer Hub/);
     assert.equal((await fetch(base+'/assets/docs.js')).status,200);
     assert.equal((await fetch(base+'/assets/docs.css')).status,200);
+    assert.equal((await fetch(base+'/assets/docs-v27.css')).status,200);
+    assert.equal((await fetch(base+'/assets/docs-v27.js')).status,200);
+    assert.equal((await fetch(base+'/assets/motion-v27.css')).status,200);
+    assert.equal((await fetch(base+'/assets/motion-v27.js')).status,200);
+    assert.match(homepage,/assets\/motion-v27\.js/);
     const openapi=await (await fetch(base+'/api/v1/openapi.json')).json();
     assert.equal(openapi.info.version,'2.7.0');
+    assert.ok(openapi.paths['/api/v2/playback/{id}']);
+    assert.ok(openapi.paths['/api/v2/romanize']);
     assert.equal((await fetch(base+'/assets/full-player.js')).status,200);
     assert.equal((await fetch(base+'/assets/full-player.css')).status,200);
     const invalidTranslation=await fetch(base+'/api/v2/translate',{
@@ -103,6 +110,20 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
       body:JSON.stringify({texts:[],target:'id'})
     });
     assert.equal(invalidTranslation.status,400);
+    const demoResolver=await (await fetch(base+'/api/v2/playback/demo-aether')).json();
+    assert.equal(demoResolver.streamUrl,'/demo/aether-bloom.mp3');
+    assert.equal(demoResolver.available,true);
+    assert.equal((await fetch(base+demoResolver.streamUrl,{headers:{Range:'bytes=0-19'}})).status,206);
+    const youtubeResolver=await (await fetch(base+'/api/v2/playback/yt-MwpMEbgC7DA')).json();
+    assert.equal(youtubeResolver.available,null);
+    assert.equal(youtubeResolver.probeUrl,'/api/v2/audio/MwpMEbgC7DA?probe=1');
+    assert.equal((await fetch(base+'/api/v2/playback/no-such-song')).status,404);
+    assert.equal((await fetch(base+'/api/v2/romanize',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({texts:[]})})).status,400);
+    const Korean=await fetch(base+'/api/v2/romanize',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({texts:['안녕하세요'],language:'ko'})});
+    assert.equal(Korean.status,200);
+    assert.match((await Korean.json()).lines[0].text,/annyeong/i);
     assert.equal((await fetch(base + '/api/v2/audio/MwpMEbgC7DA')).status, 403);
     assert.equal((await fetch(base + '/api/v2/audio/MwpMEbgC7DA?download=1')).status,403);
     assert.equal((await fetch(base + '/api/v1/search?provider=audius&q=test')).status, 400);
