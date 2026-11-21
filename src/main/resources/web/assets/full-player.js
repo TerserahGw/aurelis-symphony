@@ -14,12 +14,13 @@ const ico = (name) => {
     prev:'<path d="m20 5-12 7 12 7zM4 5v14"/>',
     shuffle:'<path d="M3 7h3c6 0 6 10 12 10h3m-3-3 3 3-3 3M3 17h3c2 0 3-2 4-4m4-3c1-2 2-3 4-3h3m-3-3 3 3-3 3"/>',
     repeat:'<path d="M3 9V7a3 3 0 0 1 3-3h14m-3-3 3 3-3 3M21 15v2a3 3 0 0 1-3 3H4m3-3-3 3 3 3"/>',
+    'repeat-one':'<path d="M3 9V7a3 3 0 0 1 3-3h14m-3-3 3 3-3 3M21 15v2a3 3 0 0 1-3 3H4m3-3-3 3 3 3"/><text x="10" y="16" font-size="10" font-weight="750" stroke="none" fill="currentColor">1</text>',
     volume:'<path d="m11 5-5 4H3v6h3l5 4zM16 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12"/>',
     volume2:'<path d="m11 5-5 4H3v6h3l5 4zM19 12H16"/>',
     words:'<path d="M5 5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM7 10h5M7 14h9"/>',
     queue:'<path d="M3 6h3M10 6h11M3 12h3M10 12h11M3 18h3M10 18h11"/>',
     translate:'<path d="M3 5h13M9 3v2M6 9a11 11 0 0 0 8 8M13 8c-1 5-4 8-9 10M14 21l4-10 4 10m-6.5-3h5"/>',
-    roman:'<path d="M3 20V4h9a4 4 0 0 1 0 8H3m9 0 5 8M20 4v16"/>',
+    roman:'<text x="1" y="18" font-size="15" font-weight="750" stroke="none" fill="currentColor">A</text><path d="M11 12h2"/><text x="14" y="17.5" font-size="15" font-weight="700" stroke="none" fill="currentColor">あ</text>',
     cast:'<path d="M2 8V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6M2 13a8 8 0 0 1 8 8M2 17a4 4 0 0 1 4 4M2 21h.01"/>',
     up:'<path d="m6 14 6-6 6 6"/>',
     x:'<path d="M5 5l14 14M19 5 5 19"/>',
@@ -56,7 +57,7 @@ box.innerHTML = `
       <section class="fp-pane fp-queue-pane" id="fpQueuePane" aria-label="Antrean musik"></section>
       <div class="fp-floating-tools" id="fpLyricsTools">
         <button id="fpTranslate" class="fp-round" aria-label="Tampilkan terjemahan Bahasa Indonesia" title="Terjemahkan">${ico('translate')}</button>
-        <button id="fpRomanize" class="fp-round" aria-label="Tampilkan romanisasi" title="Romanisasi">${ico('roman')}</button>
+        <button id="fpRomanize" class="fp-round" aria-label="Tampilkan romanisasi" title="Romanisasi · A ke あ">${ico('roman')}</button>
       </div>
     </div>
     <div class="fp-bottom">
@@ -130,7 +131,12 @@ function refresh() {
   $('fpLike').classList.toggle('favored',!!id && s.favorites?.includes(id));
   $('fpPlay').innerHTML=ico(s.paused?'play':'pause');
   $('fpShuffle').classList.toggle('active',!!s.shuffle);
+  $('fpShuffle').setAttribute('aria-pressed',String(!!s.shuffle));
   $('fpRepeat').classList.toggle('active',!!s.repeat);
+  $('fpRepeat').setAttribute('aria-pressed',String(!!s.repeat));
+  $('fpRepeat').setAttribute('aria-label',s.repeat===2?'Ulang satu lagu':s.repeat===1?'Ulang semua lagu':'Ulang mati');
+  $('fpRepeat').title=['Ulang mati','Ulang semua','Ulang satu lagu'][s.repeat]||'Ulang';
+  $('fpRepeat').innerHTML=ico(s.repeat===2?'repeat-one':'repeat');
   $('fpAutoplayIcon').classList.toggle('active',!!s.autoplay);
   $('fpVolume').value=String(Math.round(s.volume*100));
   $('fpTranslate').classList.toggle('selected',!!translationEnabled);
@@ -168,6 +174,8 @@ function paintKaraoke(s,index){
       const fill=i<index?'100%':'0%';
       for(const span of nodes[i].querySelectorAll('[data-word-start],.fp-line-progress')){
         span.style.setProperty('--fill',fill);
+        span.classList.remove('singing');
+        span.classList.toggle('sung',i<index);
       }
     }
   }
@@ -180,6 +188,9 @@ function paintKaraoke(s,index){
       const start=Number(span.dataset.wordStart),end=Math.max(start+.05,Number(span.dataset.wordEnd)||start+.45);
       const fill=time<=start?0:time>=end?100:Math.min(100,Math.max(0,(time-start)/(end-start)*100));
       span.style.setProperty('--fill',fill.toFixed(1)+'%');
+      const singing=fill>0.5&&fill<99.5;
+      span.classList.toggle('singing',singing);
+      span.classList.toggle('sung',fill>=99.5);
     }
   }
   const lineElement=node.querySelector('.fp-line-progress');
@@ -207,6 +218,7 @@ function updateFocus(s) {
   children.forEach((el,i)=>{
     el.classList.toggle('active',i===index);
     el.classList.toggle('past',i<index);
+    el.classList.toggle('upcoming',i>index);
   });
   if(opened&&index>=0&&children[index]){
     const pane=$('fpLyricsPane'), node=children[index];
