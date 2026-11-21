@@ -116,3 +116,6 @@
 }
 .aurelis-reduce-motion .fp-lyric.active .fp-lyric-body{animation:none!important}
 .aurelis-reduce-motion .fp-lyrics-pane{scroll-behavior:auto}
+
+/* Actual word sync preserves original whitespace and punctuation. */
+.fp-word-gap{color:inherit;-webkit-text-fill-color:currentColor;white-space:pre-wrap}
