@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.3.0",
+    "version": "2.3.1",
     "description": "Aurelis Symphony 2.3: YouTube-only metadata, artist-and-vibe radio, Enhanced LRC word timing, opt-in translation, unofficial experimental audio playback."
   },
   "servers": [
@@ -469,7 +469,7 @@
     },
     "/api/v2/audio/{videoId}": {
       "get": {
-        "summary": "Experimental direct-audio byte relay, no DRM or access bypass",
+        "summary": "Experimental direct-audio relay and optional download; may fail due to anti-bot",
         "parameters": [
           {
             "name": "videoId",
@@ -489,6 +489,28 @@
               ]
             },
             "description": "Read only initial bytes and return diagnostic JSON"
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "description": "Set 1 to request Content-Disposition attachment on a playable stream. Does not bypass upstream restrictions.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "required": false,
+            "description": "Suggested audio download filename (ASCII-sanitized server-side).",
+            "schema": {
+              "type": "string",
+              "maxLength": 130
+            }
           }
         ],
         "responses": {

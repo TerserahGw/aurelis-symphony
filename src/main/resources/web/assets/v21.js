@@ -209,7 +209,7 @@ function hero() {
 function homeView() {
   const featured = uniq(state.home.length ? state.home : state.catalog);
   const recentTracks = uniq(state.history.map(trackById).filter(Boolean));
-  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.2.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
+  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.3.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
     '<p class="subheading">Temukan lagu, buat playlist, dan dengarkan dengan pemutar audio Aurelis.</p>' +
     hero() + chips() +
     section('Pilihan untukmu', state.loading ? skeleton() : cards(featured, 12), 'DENGARKAN SEKARANG',

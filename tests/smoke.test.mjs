@@ -15,7 +15,7 @@ test('download filenames are safe and correct for MP4 and WebM audio', () => {
     'attachment; filename="Aurelis Demo.m4a"');
   assert.equal(contentDisposition('Demo','MwpMEbgC7DA','audio/webm'),
     'attachment; filename="Demo.webm"');
-  assert.doesNotMatch(contentDisposition('\r\nX-Test: injected','abc', 'audio/mp4'),/\\r|\\n/);
+  assert.doesNotMatch(contentDisposition('\r\nX-Test: injected','abc', 'audio/mp4'),/[\r\n]/);
 });
 test('YouTube URL whitelist', () => {
   assert.equal(lookupYouTube('https://youtube.com/watch?v=MwpMEbgC7DA')?.videoId, 'MwpMEbgC7DA');
@@ -68,7 +68,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(up, true, 'server starts');
-    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.3.0');
+    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.3.1');
     const homepage=await (await fetch(base + '/')).text();
     assert.match(homepage,/assets\/v21\.js/);
     assert.match(homepage,/assets\/full-player\.js/);
