@@ -85,15 +85,19 @@ async function formatFor(id, force = false) {
 async function upstreamFetch(url, range, signal) {
   for (let redirects=0; redirects<3; redirects++) {
     if (!allowedMediaHost(url)) throw makeError('upstream_host_blocked', 'Host sumber audio tidak diizinkan.');
-    const timeout = AbortSignal.timeout(12_000);
-    const res = await fetch(url, {
-      headers: {
-        ...(range ? {'Range':range} : {}),
-        'Accept-Encoding':'identity'
-      },
-      signal:AbortSignal.any([signal,timeout]),
-      redirect:'manual'
-    });
+    const headerTimeout = new AbortController();
+    const timer = setTimeout(() => headerTimeout.abort(), 12_000);
+    let res;
+    try {
+      res = await fetch(url, {
+        headers: {
+          ...(range ? {'Range':range} : {}),
+          'Accept-Encoding':'identity'
+        },
+        signal:AbortSignal.any([signal,headerTimeout.signal]),
+        redirect:'manual'
+      });
+    } finally { clearTimeout(timer); }
     if ([301,302,303,307,308].includes(res.status)) {
       const next = res.headers.get('location');
       await res.body?.cancel();
@@ -166,10 +170,13 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     reader = response.body.getReader();
     // Read first bytes *before* writing HTTP headers. This prevents Cloudflare
     // receiving a 206 with an empty/truncated body if upstream fails immediately.
-    const first = await Promise.race([
-      reader.read(),
-      new Promise((_,reject)=>setTimeout(()=>reject(makeError('first_byte_timeout','Sumber audio tidak mengirim byte pertama.')),12_000))
-    ]);
+    let first, firstTimer;
+    try {
+      first = await Promise.race([
+        reader.read(),
+        new Promise((_,reject)=>{ firstTimer=setTimeout(()=>reject(makeError('first_byte_timeout','Sumber audio tidak mengirim byte pertama.')),12_000); })
+      ]);
+    } finally { clearTimeout(firstTimer); }
     if (first.done || !first.value?.byteLength) {
       throw makeError('empty_stream','Sumber audio tidak menghasilkan data.');
     }
@@ -224,6 +231,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     active--;
     res.off('close',onClose);
     if (!started && reader) await reader.cancel().catch(()=>{});
+    if (!started && !reader && response?.body) await response.body.cancel().catch(()=>{});
     if (!res.writableEnded && !res.destroyed) res.end();
   }
 }
