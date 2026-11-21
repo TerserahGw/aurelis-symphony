@@ -26,7 +26,8 @@
 
 - **Complete frontend redesign:** dark Spotify / YouTube Music-inspired layout, compact side navigation, responsive album cards, search results, library, saved tracks, playlist screens, song menu, native mini-player, mobile navigation, lyrics, and queue panel.
 - The new frontend is in assets/v21.js and assets/v21.css; index.html loads them. Previous HTML is backed up as index-v20.html and the old JS/CSS remain in the repository.
-- **No YouTube iframe in the 2.2 frontend.** HTMLAudioElement plays original MP3 files and requests experimental direct audio from /api/v2/audio/:id for YouTube.js results.
+- **No YouTube iframe in the 2.2 frontend.** HTMLAudioElement plays original demo MP3s, authorized Audius audio when accessible, and requests experimental direct audio from /api/v2/audio/:id for YouTube.js results.
+- **Selectable sources:** Audius REST API (official third-party streaming source, with an independent music catalog), or YouTube.js (unofficial metadata and experimental audio). Audius search passed live testing but sample media requests from GitHub Actions were blocked by Cloudflare error 1010; actual Android/Altare playback still needs testing. Demo originals remain reliable.
 - YouTube.js 18.3.0 searches music, retrieves public format information and, when possible, relays audio as a stream with byte-range support. Direct streaming **can fail** due to provider restrictions, IP blocking, token requirements, unsupported codecs or HTTP Range behavior. We do not bypass DRM, paywalls, access checks, or authentication.
 - **Up to eight Up Next recommendations** are refreshed by a related-song search. This is not a real personalized recommendation model.
 - Favorites, history and playlists reuse the same existing localStorage keys as 2.0. No account login and no guaranteed cross-device sync.
@@ -36,7 +37,7 @@
 
 YouTube's Developer Policies do not permit separating audio from video through YouTube API Services; this experimental mode is **not a supported or officially compliant YouTube integration**. Do not assume unrestricted access or redistribution rights. For a public service, use recordings you own or have permission to distribute, or use an authorized platform integration.
 
-This release enables AURELIS_STREAM_EVAL by default using a bounded Node VM to help YouTube.js decipher available playback URLs. It executes upstream-supplied script in the Node process and **carries security risk**; Node VM is not a complete security boundary. Set AURELIS_STREAM_EVAL=false to turn it off; direct streaming may then fail more often. Even with deciphering enabled, playback can fail because of upstream restrictions.
+The risky AURELIS_STREAM_EVAL feature is **disabled by default**. Explicitly setting AURELIS_STREAM_EVAL=true runs dynamic upstream player code inside a time-bounded Node VM; Node VM is not a complete security boundary, so only use on an isolated host if the risk is acceptable. Even with it enabled, YouTube.js can report 'Streaming data not available'.
 
 See https://developers.google.com/youtube/terms/developer-policies/ and https://ytjs.dev/guide/getting-started
 
@@ -61,7 +62,7 @@ Suggested environment values:
 
 For larger instances, adjust AURELIS_MAX_STREAMS and Node heap based on actual usage, not RAM alone. Real limits include upstream bandwidth, connection count and hosting egress. If your Altare deployment is connected to GitHub rather than GHCR, set Node >= 22, npm install --omit=dev, and npm start.
 
-You can set AURELIS_STREAM_EVAL=false if the risk of interpreting upstream JavaScript is unacceptable. Leave AURELIS_DIRECT_AUDIO=false to disable experimental streaming completely.
+Leave AURELIS_STREAM_EVAL=false for the safer default, or opt in with true only after assessing the risks. Leave AURELIS_DIRECT_AUDIO=false to disable experimental streaming completely.
 
 ## Verify deployment
 
@@ -88,7 +89,7 @@ Backend: Node.js 22 built-in HTTP; no frontend bundler or Chromium. The tests ar
 - GET /api/v1/health
 - GET /api/v1/config
 - GET /api/v1/catalog
-- GET /api/v1/search?q=...&provider=youtube
+- GET /api/v1/search?q=...&provider=audius|youtube
 - GET /api/v1/recommendations?track=...&artist=...
 - GET /api/v2/home
 - GET /api/v2/status
