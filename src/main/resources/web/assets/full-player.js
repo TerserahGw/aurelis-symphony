@@ -90,7 +90,8 @@ let translationEnabled=read('playerTranslation',false);
 let romanEnabled=read('playerRomanization',true);
 let translations=new Map(),translationBusy=false,lastFocus=-2,lastSeek=false;
 let timerToast,touchY=0,touchX=0,lastTranslateIndex=-1;
-let frame=0,lastFrame=0;
+let frame=0,lastFrame=0,lastKaraokeIndex=-999;
+let lastKaraokeEnabled=true,lastLineGlowEnabled=true;
 const prefs=()=>window.AurelisPreferences?.values || {karaoke:true,lineGlow:true,lyricSize:31,romanization:romanEnabled,translation:translationEnabled};
 const lyricClock=s=>(Number(s.time)||0)+(window.AurelisPreferences?.getOffset(s.current)||0);
 function flash(text) {
@@ -159,23 +160,33 @@ function paintKaraoke(s,index){
   const settings=prefs(),time=lyricClock(s);
   const lines=s.lyrics?.lines||[];
   const nodes=$('fpLyricsPane').querySelectorAll('[data-lyric-index]');
-  for(let i=0;i<nodes.length;i++){
-    const line=lines[i],node=nodes[i];
-    if(!line)continue;
-    const words=node.querySelectorAll('[data-word-start]');
-    if(words.length&&settings.karaoke!==false){
-      for(const span of words){
-        const start=Number(span.dataset.wordStart),end=Math.max(start+.05,Number(span.dataset.wordEnd)||start+.45);
-        const fill=time<=start?0:time>=end?100:Math.min(100,Math.max(0,(time-start)/(end-start)*100));
-        span.style.setProperty('--fill',fill.toFixed(1)+'%');
+  // Repaint past/future lines only when the current line changes; animate
+  // the active one at 30 fps to keep Android CPU and battery use predictable.
+  if(index!==lastKaraokeIndex){
+    lastKaraokeIndex=index;
+    for(let i=0;i<nodes.length;i++){
+      const fill=i<index?'100%':'0%';
+      for(const span of nodes[i].querySelectorAll('[data-word-start],.fp-line-progress')){
+        span.style.setProperty('--fill',fill);
       }
     }
-    const lineElement=node.querySelector('.fp-line-progress');
-    if(lineElement){
-      const start=Number(line.time)||0,end=Math.max(start+.25,Number(line.endTime)||start+3);
-      const fill=settings.lineGlow===false?0:time<=start?0:time>=end?100:Math.min(100,(time-start)/(end-start)*100);
-      lineElement.style.setProperty('--fill',fill.toFixed(1)+'%');
+  }
+  if(index<0||!nodes[index])return;
+  const node=nodes[index],line=lines[index];
+  if(!line)return;
+  const words=node.querySelectorAll('[data-word-start]');
+  if(words.length&&settings.karaoke!==false){
+    for(const span of words){
+      const start=Number(span.dataset.wordStart),end=Math.max(start+.05,Number(span.dataset.wordEnd)||start+.45);
+      const fill=time<=start?0:time>=end?100:Math.min(100,Math.max(0,(time-start)/(end-start)*100));
+      span.style.setProperty('--fill',fill.toFixed(1)+'%');
     }
+  }
+  const lineElement=node.querySelector('.fp-line-progress');
+  if(lineElement){
+    const start=Number(line.time)||0,end=Math.max(start+.25,Number(line.endTime)||start+3);
+    const fill=settings.lineGlow===false?0:time<=start?0:time>=end?100:Math.min(100,(time-start)/(end-start)*100);
+    lineElement.style.setProperty('--fill',fill.toFixed(1)+'%');
   }
 }
 function animateWords(now){
@@ -288,7 +299,7 @@ function renderLyrics(force=false) {
         (words?'<div class="fp-lyric-roman">'+esc(words)+'</div>':'')+
         (translated?'<div class="fp-lyric-sub">'+esc(translated)+'</div>':'')+'</div>';
     }).join('');
-  lastFocus=-2;
+  lastFocus=-2;lastKaraokeIndex=-999;
   updateFocus(s);
   if(translationEnabled)requestTranslations();
 }
@@ -442,8 +453,10 @@ document.addEventListener('keydown',event=>{if(opened&&event.key==='Escape')clos
 window.addEventListener('aurelis:preferences',()=>{
   const current=prefs();
   const newTranslation=!!current.translation,newRoman=!!current.romanization;
-  const rerender=newTranslation!==translationEnabled || newRoman!==romanEnabled;
+  const rerender=newTranslation!==translationEnabled || newRoman!==romanEnabled
+    || current.karaoke!==lastKaraokeEnabled || current.lineGlow!==lastLineGlowEnabled;
   translationEnabled=newTranslation;romanEnabled=newRoman;
+  lastKaraokeEnabled=current.karaoke;lastLineGlowEnabled=current.lineGlow;
   if(opened){refresh();if(rerender){lastLyrics=null;renderLyrics(true);}else updateFocus(snapshot());}
 });
 window.addEventListener('aurelis:track',()=>{if(opened){refresh();renderLyrics(true);renderQueue();}});
