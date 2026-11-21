@@ -123,7 +123,9 @@ export function rankRadio(candidates,options={}) {
     return true;
   }
   for(const track of list){if(output.length>=(options.limit||12))break;add(track,maxArtist);}
-  if(output.length<Math.min(6,options.limit||12))
+  // In balanced/discover mode, artist variety outranks filling the last few
+  // slots with repetitive choices; familiar mode may deliberately repeat artists.
+  if(mode==='familiar' && output.length<Math.min(6,options.limit||12))
     for(const track of list){if(output.length>=(options.limit||12))break;add(track,2);}
   return output;
 }
