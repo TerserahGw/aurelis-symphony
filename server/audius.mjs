@@ -8,7 +8,7 @@ const cache = new Map();
 const LIMIT = 60;
 async function getJson(path) {
   const response = await fetch(API + path, {
-    headers: { Accept:'application/json', 'User-Agent':'AurelisSymphony/2.2' },
+    headers: { Accept:'application/json', 'User-Agent':'Mozilla/5.0 (compatible; AurelisSymphony/2.2; +https://github.com/TerserahGw/aurelis-symphony)' },
     signal:AbortSignal.timeout(10_000)
   });
   if (!response.ok) throw new Error('Audius API HTTP '+response.status);
@@ -25,7 +25,7 @@ function sourceArt(t) {
 }
 export function normalizeAudius(t) {
   const raw=String(t?.id||'');
-  if (!ID.test(raw) || !t?.title || t.is_streamable===false) return null;
+  if (!ID.test(raw) || !t?.title || t.is_streamable!==true || t.is_stream_gated===true || t.access?.stream===false) return null;
   const audio=API+'/tracks/'+encodeURIComponent(raw)+'/stream?app_name='+APP;
   const url = typeof t.permalink==='string' && /^https:\/\/(www\.)?audius\.co\//.test(t.permalink) ? t.permalink : 'https://audius.co';
   return {
