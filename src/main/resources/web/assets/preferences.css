@@ -70,7 +70,7 @@
 @keyframes asp-pop{from{opacity:0;transform:translateY(-6px) scale(.96)}to{opacity:1;transform:none}}
 @media(max-width:650px){
  .asp-overlay{padding:0;place-items:end center}
- .asp-panel{width:100%;height:min(790px,94dvh);max-height:94dvh;min-height:0;display:flex;flex-direction:column;border-radius:20px 20px 0 0;border-bottom:0}
+ .asp-panel{width:100%;height:min(750px,88dvh);max-height:88dvh;min-height:0;display:flex;flex-direction:column;border-radius:20px 20px 0 0;border-bottom:0}
  .asp-sidebar{padding:14px 14px 0;background:#151b1b;border-right:0;border-bottom:1px solid #ffffff16;gap:9px}
  .asp-sidebar h2{font-size:17px;padding:0 6px;margin:0}
  .asp-sidebar p,.asp-side-bottom{display:none}
