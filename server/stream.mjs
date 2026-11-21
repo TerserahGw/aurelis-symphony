@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { Script } from 'node:vm';
 import { Innertube, Platform } from 'youtubei.js';
 import { fallbackAudio } from './ytdl-fallback.mjs';
+import { contentDisposition } from './download.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 const FORMAT_TTL = 90_000;
@@ -154,6 +155,8 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
   if (!validSingleRange(req.headers.range)) return json(res,416,{ok:false,code:'invalid_range',message:'Range audio harus tunggal.'});
   if (active>=MAX_STREAMS) return json(res,429,{ok:false,code:'busy',message:'Sumber audio sedang sibuk, coba lagi.'});
   const probe = searchParams.get('probe')==='1';
+  const download = !probe && searchParams.get('download')==='1';
+  const downloadTitle = String(searchParams.get('title')||'').slice(0,130);
   const range = probe ? 'bytes=0-16383' : (req.headers.range || 'bytes=0-');
   const abort = new AbortController();
   let disposed = false, reader, started = false, response;
@@ -200,8 +203,13 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     const cl = response.headers.get('content-length');
     if (response.status===206 && cr) out['Content-Range']=cr;
     if (cl && /^\d+$/.test(cl)) out['Content-Length']=cl;
-    if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(response.status,out); return res.end(); }
-    res.writeHead(response.status,out);
+    if(download)out['Content-Disposition']=contentDisposition(downloadTitle,id,mime);
+    // A full download requested without Range must be a 200 response, not a
+    // misleading 206 partial response from the upstream bytes=0- request.
+    const clientStatus=download&&!req.headers.range?200:response.status;
+    if(clientStatus===200)delete out['Content-Range'];
+    if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(clientStatus,out); return res.end(); }
+    res.writeHead(clientStatus,out);
     started = true;
     let bytes = 0;
     let chunk = first.value;
@@ -227,7 +235,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     // use the exact YouTube video ID chosen by the user (no replacement song).
     if (ALTERNATE_ENABLED && !res.headersSent && !disposed && !abort.signal.aborted) {
       try {
-        const alternate=await fallbackAudio({id,req,res,range,probe,signal:abort.signal});
+        const alternate=await fallbackAudio({id,req,res,range,probe,download,downloadTitle,signal:abort.signal});
         stats.ok++;
         stats.alternativeSuccess++;
         stats.lastEngine='@distube/ytdl-core';

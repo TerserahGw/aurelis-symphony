@@ -30,6 +30,8 @@ const ICONS = {
   external:'<path d="M13 4h7v7M20 4l-9 9M19 14v5H5V5h5"/>',
   trash:'<path d="M3 6h18M8 6V4h8v2M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
   check:'<path d="m4 12 5 5L20 6"/>',
+  download:'<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>',
+  'file-text':'<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM13 2v7h7M8 13h8M8 17h8"/>',
   alert:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>'
 };
 const ic = name => '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || ICONS.disc) + '</svg>';
@@ -47,7 +49,7 @@ const state = {
   current: null, shuffle: read('shuffle', false), repeat: Number(read('repeat', 0)) || 0,
   drawer: '', lyrics: null, lyricsSource: '', lyricsIndex: -1, loading: false,
   searching: false, sequence: 0, playSequence: 0, lyricSequence: 0, panelError: '',
-  menuTrack: null, initial: true
+  menuTrack: null, initial: true, playedCycle: []
 };
 const TRACK_LIMIT = 240;
 const trackPopover=document.createElement('div');
@@ -207,7 +209,7 @@ function hero() {
 function homeView() {
   const featured = uniq(state.home.length ? state.home : state.catalog);
   const recentTracks = uniq(state.history.map(trackById).filter(Boolean));
-  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.2.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
+  return '<div class="eyebrow">GOOD VIBES ONLY · AURELIS 2.3.1</div><h1 class="greeting">Musik untuk <span>harimu.</span></h1>' +
     '<p class="subheading">Temukan lagu, buat playlist, dan dengarkan dengan pemutar audio Aurelis.</p>' +
     hero() + chips() +
     section('Pilihan untukmu', state.loading ? skeleton() : cards(featured, 12), 'DENGARKAN SEKARANG',
@@ -335,8 +337,12 @@ function setPlayer() {
     ? '<img src="' + esc(t.artwork) + '" alt="Artwork">' : '<span>✦</span>';
   $('playerLike').classList.toggle('liked', !!t && state.favorite.has(t.id));
   $('playButton').innerHTML = ic(audio.paused ? 'play' : 'pause');
-  $('shuffleButton').classList.toggle('active', state.shuffle);
-  $('repeatButton').classList.toggle('active', state.repeat > 0);
+  $('shuffleButton').classList.toggle('active',state.shuffle);
+  $('shuffleButton').setAttribute('aria-pressed',String(!!state.shuffle));
+  $('repeatButton').classList.toggle('active',state.repeat>0);
+  $('repeatButton').classList.toggle('repeat-one',state.repeat===2);
+  $('repeatButton').setAttribute('aria-label',state.repeat===2?'Ulang satu lagu':state.repeat===1?'Ulang semua':'Ulang mati');
+  $('repeatButton').setAttribute('aria-pressed',String(state.repeat>0));
   updateTime();
   emit('player');
 }
@@ -355,7 +361,12 @@ async function play(t) {
   if (!t) return;
   if (!t.id) return;
   const seq = ++state.playSequence;
-  state.current = t;
+  state.current=t;
+  // A listening session can be repeated in order or reshuffled after it ends.
+  if(!state.playedCycle.some(x=>x?.id===t.id)){
+    state.playedCycle.push(t);
+    if(state.playedCycle.length>75)state.playedCycle.shift();
+  }
   remember(t);
   state.history = [t.id, ...state.history.filter(id => id !== t.id)].slice(0, 70);
   state.lyrics = null;
@@ -420,18 +431,31 @@ async function recommend(t,seq) {
     console.warn('Radio fallback used:',e.message);
   }
 }
+function takeNext(list){
+  if(!list?.length)return null;
+  const alternatives=list.map((t,i)=>({t,i})).filter(x=>x.t?.id!==state.current?.id);
+  const index=state.shuffle
+    ? (alternatives.length?alternatives[Math.floor(Math.random()*alternatives.length)].i:Math.floor(Math.random()*list.length))
+    : 0;
+  return list.splice(index,1)[0]||null;
+}
 function next() {
-  const queued = state.queue.shift();
-  const suggested = !queued && state.autoplay && state.suggestions.shift();
-  const selected = queued || suggested;
-  if (!selected) {
-    if (state.repeat) { audio.currentTime = 0; audio.play().catch(() => {}); }
-    else { audio.pause(); toast('Antrean sudah selesai.'); }
-    return;
+  let selected=takeNext(state.queue);
+  if(!selected&&state.autoplay)selected=takeNext(state.suggestions);
+  if(!selected&&state.repeat===1&&state.playedCycle.length){
+    // Repeat ALL replays this listening session, rather than looping the last
+    // track forever. Shuffle picks a new random next track from the same set.
+    state.queue=state.playedCycle.slice();
+    selected=takeNext(state.queue);
   }
-  save();
-  emit('queue');
-  play(selected);
+  if(!selected){
+    if(state.repeat===2&&state.current){
+      audio.currentTime=0;audio.play().catch(()=>{});
+      return;
+    }
+    audio.pause();toast('Antrean sudah selesai.');return;
+  }
+  save();emit('queue');play(selected);
 }
 function previous() {
   if (currentTime() > 3) { audio.currentTime = 0; return; }
@@ -577,6 +601,9 @@ function showTrackMenu(t,anchor){
   html+=option('next','Putar berikutnya','skip-forward');
   html+=option('queue','Tambahkan ke antrean','list');
   html+=option('like',liked?'Hapus dari lagu disukai':'Sukai lagu','heart');
+  html+='<div class="pop-divider"></div><div class="pop-subtitle">UNDUH</div>';
+  html+=option('download-audio','Download audio','download');
+  html+=option('download-lyrics','Download lirik (.lrc/.txt)','file-text');
   html+='<div class="pop-divider"></div><div class="pop-subtitle">OFFSET LIRIK · KHUSUS LAGU</div>'+
     '<div class="pop-offset"><button data-menu="offset-minus" aria-label="Perlambat lirik">−</button>'+
     '<span id="popOffsetValue">'+(offset>=0?'+':'')+offset.toFixed(2)+' s</span>'+
@@ -620,6 +647,79 @@ function removeFromPlaylist(id) {
   p.tracks = (p.tracks || []).filter(t => (typeof t === 'string' ? t : t.id) !== id);
   save(); render(); toast('Lagu dihapus dari playlist');
 }
+function filenameFor(t){
+  const name=[t?.artist,t?.title].filter(Boolean).join(' - ')||'Aurelis';
+  return name.replace(/[\\/:*?"<>|\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,110)||'Aurelis';
+}
+function saveFile(content,filename,mime='text/plain;charset=utf-8'){
+  const blob=content instanceof Blob?content:new Blob([content],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download=filename;link.style.display='none';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),15000);
+}
+function downloadLink(href,name){
+  const a=document.createElement('a');a.href=href;a.download=name;a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();
+}
+function stamp(sec){
+  const n=Math.max(0,Number(sec)||0),min=String(Math.floor(n/60)).padStart(2,'0');
+  return min+':'+(n%60).toFixed(2).padStart(5,'0');
+}
+function formatLrc(lines){
+  const synced=lines.some(line=>Number.isFinite(Number(line.time))&&line.time!==null);
+  return {synced,text:lines.map(line=>{
+    if(!synced || line.time===null || !Number.isFinite(Number(line.time)))return String(line.text||'');
+    const header='['+stamp(line.time)+']';
+    if(Array.isArray(line.words)&&line.words.length){
+      return header+line.words.map(w=>'<'+stamp(w.start)+'>'+String(w.text||'')).join('');
+    }
+    return header+String(line.text||'');
+  }).join('\n')+'\n'};
+}
+async function downloadAudio(t){
+  const url=audioUrl(t);
+  if(!url){toast('Sumber audio tidak tersedia.',true);return;}
+  const name=filenameFor(t);
+  if(t.audio && typeof t.audio==='string' && t.audio.startsWith('/')){
+    downloadLink(url,name+'.mp3');
+    toast('Download audio asli dimulai.');
+    return;
+  }
+  const id=t.videoId||(String(t.id).startsWith('yt-')?String(t.id).slice(3):'');
+  if(!/^[\w-]{11}$/.test(id)){toast('ID lagu tidak valid.',true);return;}
+  toast('Memeriksa ketersediaan audio YouTube…');
+  try{
+    const response=await fetch('/api/v2/audio/'+id+'?probe=1',{signal:AbortSignal.timeout(46000)});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||!body.ok)throw new Error(body.message||body.code||'Sumber audio tidak tersedia');
+    const params=new URLSearchParams({download:'1',title:name});
+    downloadLink('/api/v2/audio/'+id+'?'+params,name+'.m4a');
+    toast('Download dimulai jika audio diizinkan oleh sumber. Format bisa M4A/WebM.');
+  }catch(e){toast('Gagal download audio: '+String(e.message||e).slice(0,125),true);}
+}
+async function downloadLyrics(t){
+  toast('Menyiapkan lirik untuk diunduh…');
+  try{
+    let lines=t.id===state.current?.id?state.lyrics?.lines:null;
+    if(!lines?.length && Array.isArray(t.lyrics))lines=t.lyrics;
+    if(!lines?.length){
+      const qs=new URLSearchParams({
+        track:String(t.title||'').replace(/\s*[\[(](official|music video|lyrics|audio|4k).*?[\])]/gi,'').trim(),
+        artist:String(t.artist||'').replace(/ - Topic$/i,''),
+        duration:String(Math.round(t.duration||0))
+      });
+      const response=await fetch('/api/v1/lyrics?'+qs,{signal:AbortSignal.timeout(30000)});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data?.message||'Pencarian lirik gagal');
+      lines=data?.result?.lines||[];
+    }
+    if(!lines.length)throw new Error('Lirik belum tersedia untuk lagu ini.');
+    const result=formatLrc(lines);
+    saveFile(result.text,filenameFor(t)+(result.synced?'.lrc':'.txt'));
+    toast(result.synced?'Lirik sinkron berhasil diunduh.':'Lirik tanpa timestamp diunduh sebagai TXT.');
+  }catch(e){toast('Tidak dapat mengunduh lirik: '+String(e.message||e).slice(0,130),true);}
+}
 function handleMenu(action, button) {
   const t = state.menuTrack;
   if (!t)return;
@@ -631,6 +731,8 @@ function handleMenu(action, button) {
     return;
   }
   closeSongPopover();
+  if (action === 'download-audio') { downloadAudio(t);return; }
+  if (action === 'download-lyrics') { downloadLyrics(t);return; }
   if (action === 'play') play(t);
   if (action === 'queue') addQueue(t);
   if (action === 'next') addQueue(t, true);
@@ -699,13 +801,13 @@ function setupEvents() {
   $('prevButton').addEventListener('click', previous);
   $('playerLike').addEventListener('click', () => like(state.current));
   $('shuffleButton').addEventListener('click', () => {
-    state.shuffle = !state.shuffle; if (state.shuffle) state.queue.sort(() => Math.random() - .5);
-    save(); setPlayer(); toast(state.shuffle ? 'Mode acak aktif' : 'Mode acak mati');
+    state.shuffle = !state.shuffle; // Shuffle is applied when selecting the next track, not by mutating visible queue order.
+    save();setPlayer();emit('queue');toast(state.shuffle?'Acak aktif · lagu berikutnya dipilih secara acak':'Acak dimatikan · sesuai urutan antrean');
   });
   $('repeatButton').addEventListener('click', () => {
     state.repeat = (state.repeat + 1) % 3;
-    save(); setPlayer();
-    toast(['Ulang mati','Ulang antrean','Ulang satu lagu'][state.repeat]);
+    save();setPlayer();emit('queue');
+    toast(['Ulang mati','Ulang seluruh sesi','Ulang satu lagu'][state.repeat]);
   });
   const storedVolume=Number(read('volume',.75));
   $('volume').value=String(Math.round((Number.isFinite(storedVolume)?Math.max(0,Math.min(1,storedVolume)):.75)*100));

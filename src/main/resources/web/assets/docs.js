@@ -4,7 +4,7 @@
   const base=location.origin;
   const endpointGroups=[
     {label:'Sistem',items:[
-      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.3.0","runtime":"node"}'},
+      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.3.1","runtime":"node"}'},
       {id:'config',method:'GET',path:'/api/v1/config',description:'Backend, sumber pencarian, ketersediaan lirik, serta kemampuan pemutar.',params:[],sample:'/api/v1/config',code:'{"name":"Aurelis Symphony","searchProviders":["youtube","catalog"],"player":"HTML5 Audio (no embed)"}'},
       {id:'status',method:'GET',path:'/api/v2/status',description:'Status eksperimen audio: engine, jumlah koneksi aktif, kode kegagalan terakhir.',params:[],sample:'/api/v2/status',code:'{"ok":true,"stream":{"engines":{"primary":"youtubei.js","fallback":"@distube/ytdl-core"}}}'}
     ]},
@@ -23,7 +23,7 @@
       {id:'translate',method:'POST',path:'/api/v2/translate',description:'Terjemahkan 1–16 baris ke bahasa Indonesia melalui MyMemory. Kirim hanya teks yang kamu punya hak untuk proses. Dapat terkena kuota.',params:[['texts','Array berisi 1–16 string; maksimal 250 karakter per baris.'],['target','id atau en.']],sample:'/api/v2/translate',body:{texts:['Hello world'],target:'id'},code:'{"ok":true,"provider":"MyMemory","translations":["Halo dunia"]}'}
     ]},
     {label:'Pemutaran dan data',items:[
-      {id:'audio',method:'GET',path:'/api/v2/audio/:videoId',description:'Audio YouTube langsung tidak resmi. Mendukung Range bila upstream mengizinkan. HTTP 424 jika sumber gagal.',params:[['videoId','ID video YouTube 11 karakter.'],['probe','Set 1 untuk menguji byte pertama tanpa streaming penuh.']],sample:'/api/v2/audio/MwpMEbgC7DA?probe=1',code:'{"ok":false,"code":"youtube_bot_challenge","retryable":true}'},
+      {id:'audio',method:'GET',path:'/api/v2/audio/:videoId',description:'Audio YouTube langsung tidak resmi. Mendukung Range bila upstream mengizinkan, ?download=1 untuk unduh, dan HTTP 424 jika sumber gagal.',params:[['videoId','ID video YouTube 11 karakter.'],['probe','Set 1 untuk menguji byte pertama tanpa streaming penuh.'],['download','Set 1 untuk Content-Disposition attachment.'],['title','Nama file unduhan (disanitasi).']],sample:'/api/v2/audio/MwpMEbgC7DA?probe=1',code:'{"ok":false,"code":"youtube_bot_challenge","retryable":true}'},
       {id:'library',method:'GET',path:'/api/v1/library',description:'Koleksi cloud bersifat opsional. Default dimatikan; data favorit/playlist umumnya disimpan di browser.',params:[],sample:'/api/v1/library',code:'{"ok":false,"error":"cloud_library_disabled"}'},
       {id:'openapi',method:'GET',path:'/api/v1/openapi.json',description:'Spesifikasi OpenAPI yang dapat digunakan oleh tooling eksternal.',params:[],sample:'/api/v1/openapi.json',code:'{"openapi":"3.1.0","info":{"title":"Aurelis Symphony API"}}'}
     ]}
