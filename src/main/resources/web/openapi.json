@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.4.0",
-    "description": "Aurelis Symphony 2.4: YouTube metadata, experimental audio, seven lyric sources and real word-level karaoke when available, ambient web player with Android Media Session support."
+    "version": "2.5.0",
+    "description": "Aurelis Symphony 2.5: YouTube music metadata, experimental audio, seven lyric sources with authentic per-word karaoke, stable fullscreen menus, responsive ambient-glass player and Android Media Session."
   },
   "servers": [
     {

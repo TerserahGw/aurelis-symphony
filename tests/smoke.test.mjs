@@ -68,7 +68,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(up, true, 'server starts');
-    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.4.0');
+    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.5.0');
     const homepage=await (await fetch(base + '/')).text();
     assert.match(homepage,/assets\/v21\.js/);
     assert.match(homepage,/assets\/full-player\.js/);
@@ -78,6 +78,8 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.equal((await fetch(base+'/assets/preferences.js')).status,200);
     assert.equal((await fetch(base+'/assets/lyrics-v23.css')).status,200);
     assert.equal((await fetch(base+'/assets/glass-v24.css')).status,200);
+    assert.equal((await fetch(base+'/assets/glass-v25.css')).status,200);
+    assert.match(homepage,/assets\/glass-v25\.css/);
     assert.equal((await fetch(base+'/assets/media-session.js')).status,200);
     const sourceList=await (await fetch(base+'/api/v1/lyrics/sources')).json();
     assert.equal(sourceList.sources.length,7);
@@ -89,7 +91,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.equal((await fetch(base+'/assets/docs.js')).status,200);
     assert.equal((await fetch(base+'/assets/docs.css')).status,200);
     const openapi=await (await fetch(base+'/api/v1/openapi.json')).json();
-    assert.equal(openapi.info.version,'2.4.0');
+    assert.equal(openapi.info.version,'2.5.0');
     assert.equal((await fetch(base+'/assets/full-player.js')).status,200);
     assert.equal((await fetch(base+'/assets/full-player.css')).status,200);
     const invalidTranslation=await fetch(base+'/api/v2/translate',{
