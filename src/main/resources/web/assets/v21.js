@@ -707,7 +707,8 @@ function setupEvents() {
     save(); setPlayer();
     toast(['Ulang mati','Ulang antrean','Ulang satu lagu'][state.repeat]);
   });
-  $('volume').value = String(Math.round((Number(read('volume', .75)) || .75) * 100));
+  const storedVolume=Number(read('volume',.75));
+  $('volume').value=String(Math.round((Number.isFinite(storedVolume)?Math.max(0,Math.min(1,storedVolume)):.75)*100));
   audio.volume = Number($('volume').value) / 100;
   $('volume').addEventListener('input', e => {
     audio.volume = Number(e.target.value) / 100;
@@ -745,7 +746,7 @@ function setupEvents() {
     if(!trackPopover.hidden&&!trackPopover.contains(e.target)
        &&!e.target.closest('[data-action=menu]'))closeSongPopover();
   },true);
-  document.addEventListener('scroll',()=>{if(!trackPopover.hidden)closeSongPopover();},true);
+  document.addEventListener('scroll',e=>{if(!trackPopover.hidden&&!trackPopover.contains(e.target))closeSongPopover();},true);
   window.addEventListener('resize',()=>{if(!trackPopover.hidden)closeSongPopover();});
   $('settingsButton').addEventListener('click',()=>window.AurelisPreferences?.open());
   audio.addEventListener('play', () => { setPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
