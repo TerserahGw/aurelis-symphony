@@ -40,23 +40,23 @@ box.hidden=true;
 box.setAttribute('aria-hidden','true');
 box.setAttribute('role','dialog');
 box.setAttribute('aria-label','Aurelis Music Player');
-box.innerHTML = \`
+box.innerHTML = `
   <div class="fp-backdrop"><img id="fpBackdrop" alt=""></div><div class="fp-wash"></div>
   <div class="fp-shell" id="fpShell">
     <span class="fp-handle" id="fpHandle"></span>
     <div class="fp-top">
-      <button id="fpClose" class="fp-close" aria-label="Tutup pemutar">\${ico('down')}</button>
+      <button id="fpClose" class="fp-close" aria-label="Tutup pemutar">${ico('down')}</button>
       <div class="fp-small-art" id="fpArt"><span>✦</span></div>
       <div class="fp-track-head"><strong id="fpTitle">Belum ada lagu</strong><small id="fpArtist">Aurelis Symphony</small></div>
-      <button id="fpLike" class="fp-icon" aria-label="Sukai lagu">\${ico('star')}</button>
-      <button id="fpMore" class="fp-icon" aria-label="Opsi lagu">\${ico('more')}</button>
+      <button id="fpLike" class="fp-icon" aria-label="Sukai lagu">${ico('star')}</button>
+      <button id="fpMore" class="fp-icon" aria-label="Opsi lagu">${ico('more')}</button>
     </div>
     <div class="fp-main" id="fpMain">
       <section class="fp-pane fp-lyrics-pane current" id="fpLyricsPane" aria-label="Lirik lagu"></section>
       <section class="fp-pane fp-queue-pane" id="fpQueuePane" aria-label="Antrean musik"></section>
       <div class="fp-floating-tools" id="fpLyricsTools">
-        <button id="fpTranslate" class="fp-round" aria-label="Tampilkan terjemahan Bahasa Indonesia" title="Terjemahkan">\${ico('translate')}</button>
-        <button id="fpRomanize" class="fp-round" aria-label="Tampilkan romanisasi" title="Romanisasi">\${ico('roman')}</button>
+        <button id="fpTranslate" class="fp-round" aria-label="Tampilkan terjemahan Bahasa Indonesia" title="Terjemahkan">${ico('translate')}</button>
+        <button id="fpRomanize" class="fp-round" aria-label="Tampilkan romanisasi" title="Romanisasi">${ico('roman')}</button>
       </div>
     </div>
     <div class="fp-bottom">
@@ -64,25 +64,25 @@ box.innerHTML = \`
       <div class="fp-timeline"><input id="fpSeek" type="range" min="0" max="1000" value="0" aria-label="Posisi lagu"></div>
       <div class="fp-time"><span id="fpElapsed">0:00</span><span id="fpRemain">-0:00</span></div>
       <div class="fp-controls">
-        <button id="fpPrev" class="fp-control" aria-label="Lagu sebelumnya">\${ico('prev')}</button>
-        <button id="fpPlay" class="fp-control primary" aria-label="Putar atau jeda">\${ico('play')}</button>
-        <button id="fpNext" class="fp-control" aria-label="Lagu berikutnya">\${ico('next')}</button>
+        <button id="fpPrev" class="fp-control" aria-label="Lagu sebelumnya">${ico('prev')}</button>
+        <button id="fpPlay" class="fp-control primary" aria-label="Putar atau jeda">${ico('play')}</button>
+        <button id="fpNext" class="fp-control" aria-label="Lagu berikutnya">${ico('next')}</button>
       </div>
       <div class="fp-volume-row">
-        \${ico('volume2')}<input id="fpVolume" type="range" min="0" max="100" value="75" aria-label="Volume">\${ico('volume')}
+        ${ico('volume2')}<input id="fpVolume" type="range" min="0" max="100" value="75" aria-label="Volume">${ico('volume')}
       </div>
       <div class="fp-menu">
-        <button id="fpLyricsTab" class="fp-tab active" aria-label="Lirik">\${ico('words')}</button>
+        <button id="fpLyricsTab" class="fp-tab active" aria-label="Lirik">${ico('words')}</button>
         <div class="fp-middle-toggles">
-          <button id="fpShuffle" aria-label="Acak">\${ico('shuffle')}</button>
-          <button id="fpRepeat" aria-label="Ulang">\${ico('repeat')}</button>
+          <button id="fpShuffle" aria-label="Acak">${ico('shuffle')}</button>
+          <button id="fpRepeat" aria-label="Ulang">${ico('repeat')}</button>
           <button id="fpAutoplayIcon" aria-label="AutoPlay">\u221e</button>
         </div>
-        <button id="fpQueueTab" class="fp-tab" aria-label="Lihat antrean">\${ico('queue')}</button>
+        <button id="fpQueueTab" class="fp-tab" aria-label="Lihat antrean">${ico('queue')}</button>
       </div>
       <div class="fp-device">AURELIS SYMPHONY · WEB PLAYER</div>
     </div>
-  </div><div class="fp-toast" id="fpToast" aria-live="polite"></div>\`;
+  </div><div class="fp-toast" id="fpToast" aria-live="polite"></div>`;
 document.body.appendChild(box);
 const app = () => window.Aurelis;
 let opened=false,closingTimer,tab='lyrics',trackId='',lastLyrics=null;
