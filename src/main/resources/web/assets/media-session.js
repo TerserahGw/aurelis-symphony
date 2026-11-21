@@ -5,7 +5,7 @@
   'use strict';
   const audio=document.getElementById('audio');
   const session=navigator.mediaSession;
-  if(!audio||!session||typeof MediaMetadata==='undefined')return;
+  if(!audio)return;
   const app=()=>window.Aurelis;
   let lastTrack='',lastPosition=0;
   function thumbnail(t){
@@ -30,7 +30,7 @@
     if(key===lastTrack)return;
     lastTrack=key;
     try{
-      session.metadata=new MediaMetadata({
+      if(session && typeof MediaMetadata!=='undefined')session.metadata=new MediaMetadata({
         title:String(t.title||'Untitled'),
         artist:String(t.artist||'Unknown artist'),
         album:String(t.album||'Aurelis Symphony'),
@@ -47,7 +47,7 @@
     }catch{}
   }
   function position(force=false){
-    if(typeof session.setPositionState!=='function')return;
+    if(!session||typeof session.setPositionState!=='function')return;
     const now=performance.now();
     if(!force&&now-lastPosition<1000)return;
     lastPosition=now;
@@ -59,7 +59,7 @@
     catch{}
   }
   function act(key,fn){
-    try{session.setActionHandler(key,fn);}catch{}
+    try{session?.setActionHandler?.(key,fn);}catch{}
   }
   act('play',()=>{const a=app();if(audio.paused)a?.toggle?.();});
   act('pause',()=>{const a=app();if(!audio.paused)a?.toggle?.();});
