@@ -1,4 +1,4 @@
-# ✦ Aurelis Symphony 2.5.0
+# ✦ Aurelis Symphony 2.6.0
 
 Responsive music player with a native HTML5 Audio element, YouTube-only search and recommendations, lyric sources, customizable fullscreen player and open REST API.
 
@@ -24,7 +24,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.5.0` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.6.0` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

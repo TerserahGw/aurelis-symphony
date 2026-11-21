@@ -189,7 +189,7 @@ shell.addEventListener('click',event=>{
     else if(kind==='offset-reset'){changeSongOffset(snap().current,0,true);render();}
     else if(kind==='export'){
       const keys=['favorites','history','playlists','queue','preferences','playerRomanization','playerTranslation','songLyricOffsets'];
-      const data={exportedAt:new Date().toISOString(),version:'2.3.0'};
+      const data={exportedAt:new Date().toISOString(),version:'2.6.0'};
       keys.forEach(key=>data[key]=load(key,null));
       const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
       const a=document.createElement('a'),url=URL.createObjectURL(blob);

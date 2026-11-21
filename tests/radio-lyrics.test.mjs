@@ -48,8 +48,22 @@ test('radio queries vibe and artist instead of the precise song title',async()=>
   assert.ok(searched.every(s=>!s.toLowerCase().includes('another love')));
   assert.ok(result.tracks.length>=3);
   assert.ok(result.tracks.every(x=>!sameSong(x,current)));
-  assert.equal(result.strategy,'artist-and-vibe-radio-v1');
+  assert.equal(result.strategy,'artist-profile-and-mood-radio-v2');
   assert.equal(inferStyle({title:'Chill Night'},[]),'chill');
+});
+test('recommendations prioritize liked-artist context and reject non-music search junk',()=>{
+  const current=track('yt-anchor','Lovers Rock','TV Girl');
+  const candidates=[
+    track('yt-podcast','Music Podcast 1 Hour','Narrator'),
+    track('yt-karaoke','Karaoke version','Various'),
+    track('yt-neutral','Midnight Sky','Independent Artist'),
+    track('yt-liked','Love Letter','Beach House'),
+    track('yt-other','Bonfire','Orion Sound')
+  ];
+  const result=rankRadio(candidates,{current,liked:[track('yt-old','Space Song','Beach House')],
+    mode:'balanced',limit:5});
+  assert.equal(result[0].artist,'Beach House');
+  assert.ok(result.every(t=>!/podcast|karaoke/i.test(t.title)));
 });
 test('Enhanced LRC preserves actual per-word timestamps and boundaries',()=>{
   const lines=parseLrc('[00:10.00]<00:10.00>Hello <00:10.40>world\n[00:11.20]Next line');

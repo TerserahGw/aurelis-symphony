@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.5.0",
-    "description": "Aurelis Symphony 2.5: YouTube music metadata, experimental audio, seven lyric sources with authentic per-word karaoke, stable fullscreen menus, responsive ambient-glass player and Android Media Session."
+    "version": "2.6.0",
+    "description": "Aurelis Symphony 2.6: mobile island interface, metadata-driven personalized radio with client-provided liked/recent context, seven lyrics sources and experimental YouTube audio. No acoustic analysis."
   },
   "servers": [
     {
@@ -185,6 +185,15 @@
             "name": "album",
             "in": "query",
             "description": "Album of anchor track",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "liked",
+            "in": "query",
+            "description": "URL-encoded JSON array of locally liked tracks (id, title, artist, album). Optional; no server account.",
             "required": false,
             "schema": {
               "type": "string"
@@ -462,6 +471,15 @@
                 "familiar",
                 "discover"
               ]
+            }
+          },
+          {
+            "name": "liked",
+            "in": "query",
+            "description": "URL-encoded JSON array of locally liked tracks (id, title, artist, album). Optional; no server account.",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ]

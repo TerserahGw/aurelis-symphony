@@ -11,6 +11,9 @@ on:
       - src/main/resources/web/assets/lyrics-v23.css
       - src/main/resources/web/assets/glass-v24.css
       - src/main/resources/web/assets/glass-v25.css
+      - src/main/resources/web/assets/island-v26.css
+      - src/main/resources/web/assets/island-v26.js
+      - server/recommend.mjs
       - src/main/resources/web/assets/media-session.js
       - server/lyrics.mjs
       - server/vendor/lirik-sync.mjs
@@ -49,6 +52,36 @@ jobs:
             page.on('pageerror',error=>errors.push(error.message));
             await page.goto('http://127.0.0.1:18080/',{waitUntil:'domcontentloaded',timeout:15000});
             await page.waitForSelector('.music-card [data-action=play]',{timeout:50000});
+            if(mobile){
+              const count=await page.locator('#mobileIslandDock .island-nav [data-nav]').count();
+              if(count!==3)throw new Error('Mobile dock has '+count+' items instead of Home, Search and Library');
+              const miniVisible=await page.locator('#prevButton').isVisible()&&await page.locator('#playButton').isVisible()
+                &&await page.locator('#nextButton').isVisible();
+              if(!miniVisible)throw new Error('Floating mini-player must have prev/play/next');
+              const bgCount=await page.locator('.island-ambient .island-wash').count();
+              if(bgCount!==4)throw new Error('Artwork-driven ambient background not initialized');
+              await page.locator('#islandSearchTrigger').click();
+              await page.locator('#mobileIslandDock.is-searching').waitFor({state:'visible',timeout:4000});
+              await page.locator('#islandSearchInput').fill('a');
+              if(await page.locator('#searchInput').inputValue()!=='a')
+                throw new Error('Island search did not sync the search field');
+              await page.locator('#islandSearchClear').click();
+              if(await page.locator('#islandSearchInput').inputValue()!=='')
+                throw new Error('Search clear did not empty query');
+              await page.locator('#islandMenuTrigger').click();
+              if(await page.locator('#mobileIslandDock').evaluate(el=>el.classList.contains('is-searching')))
+                throw new Error('Hamburger did not restore the navigation island');
+              await page.locator('#mobileIslandDock [data-nav=library]').click();
+              await page.locator('#view .library-tabs').waitFor({state:'visible'});
+              if(await page.locator('#view [data-action=library-tab]').count()!==4)
+                throw new Error('Library missing playlist/favorites/history categories');
+              await page.locator('#view [data-action=library-tab][data-section=history]').click();
+              if(!await page.locator('#view').textContent().then(t=>t.includes('Baru diputar')))
+                throw new Error('History not accessible inside Library');
+              await page.locator('#mobileIslandDock [data-nav=home]').click();
+              await page.locator('.music-card [data-action=play]').first().waitFor({state:'visible'});
+              await page.screenshot({path:'/tmp/aurelis-mobile-islands.png'});
+            }
             await page.locator('.music-card [data-action=play]').first().click({timeout:10000});
             await page.locator('#playerTrack').click({timeout:10000});
             await page.waitForSelector('#fullPlayer.open',{timeout:8000});
