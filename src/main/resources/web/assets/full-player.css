@@ -134,3 +134,5 @@
 }
 @media(max-height:690px){.fp-handle{margin-bottom:10px}.fp-main{padding-top:12px}.fp-controls{margin:1px 0 8px}.fp-menu{margin-bottom:2px}.fp-volume-row{margin-bottom:7px}.fp-time{margin-bottom:6px}.fp-lyric{font-size:24px;padding:8px 0}.fp-bottom-label{margin:2px 0 8px}}
 @media(prefers-reduced-motion:reduce){.full-player *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+.fp-floating-tools[hidden]{display:none!important}
