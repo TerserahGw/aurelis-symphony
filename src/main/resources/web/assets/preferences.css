@@ -92,3 +92,14 @@
 
 /* Keep anchored actions within short Android landscape viewports. */
 .song-popover{max-height:calc(100dvh - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+
+/* 2.3.1 · keep expanded song actions inside short Android viewports. */
+.song-popover{max-height:calc(100dvh - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.song-popover .pop-divider{margin:6px 3px}
+#fpRepeat,[id=repeatButton]{position:relative}
+#fpRepeat.active,[id=repeatButton].active{color:#c9f9d5}
+#fpRepeat[aria-label="Ulang satu lagu"]{color:#dcfbe2}
+[id=repeatButton].repeat-one:after{
+  content:'1';position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);
+  font-size:9px;font-weight:900;line-height:1;color:inherit;pointer-events:none
+}
