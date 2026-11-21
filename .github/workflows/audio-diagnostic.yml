@@ -1,0 +1,40 @@
+name: Upstream audio diagnostic (non-blocking)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - server/stream.mjs
+      - server.mjs
+      - .github/workflows/audio-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  audio-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Start test server and probe two sources
+        env:
+          HOST: 127.0.0.1
+          PORT: '18080'
+          AURELIS_DIRECT_AUDIO: 'true'
+          AURELIS_STREAM_EVAL: 'true'
+          NODE_OPTIONS: --max-old-space-size=512
+        run: |
+          node server.mjs > /tmp/aurelis-server.log 2>&1 &
+          echo $! > /tmp/aurelis.pid
+          sleep 4
+          for video in MwpMEbgC7DA jNQXAC9IVRw; do
+            echo "=== PROBE $video ==="
+            curl -sS --max-time 25 -w '\nHTTP %{http_code} TIME %{time_total}s\n' "http://127.0.0.1:18080/api/v2/audio/$video?probe=1" || true
+            echo
+          done
+          echo '=== SERVER LOG (diagnostic) ==='
+          tail -n 25 /tmp/aurelis-server.log
+          kill $(cat /tmp/aurelis.pid) || true
+          exit 0
