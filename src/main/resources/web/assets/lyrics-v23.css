@@ -1,0 +1,62 @@
+/* v2.3 karaoke — every line remains readable and inside the viewport */
+:root{--aurelis-lyric-size:31px;--aurelis-lyric-lit:#f6fff9;--aurelis-lyric-dim:#ffffff73}
+.fp-main{min-height:0;overflow:hidden}
+.fp-lyrics-pane{
+  box-sizing:border-box;
+  padding:16px 10px max(110px,13vh) 8px;
+  mask-image:none!important;
+  -webkit-mask-image:none!important;
+  overflow-x:hidden;overflow-y:auto;
+  scroll-padding-block:22%;
+  overscroll-behavior:contain;
+  scrollbar-width:none
+}
+.fp-lyrics-pane::-webkit-scrollbar{display:none}
+.fp-lyric{
+  display:block;max-width:100%;min-width:0;
+  font-size:clamp(20px,var(--aurelis-lyric-size),46px)!important;
+  line-height:1.34!important;
+  padding:12px 3px 16px 0!important;
+  letter-spacing:-.035em;
+  white-space:normal;overflow-wrap:anywhere;word-break:normal;
+  filter:none!important;opacity:.55;
+  transition:color .34s,opacity .34s,transform .4s cubic-bezier(.2,.8,.2,1)
+}
+.fp-lyric.past{opacity:.62;filter:none!important}
+.fp-lyric.active{opacity:1;filter:none!important;transform:none!important;text-shadow:none}
+.fp-lyric.active:before{left:-8px;top:13px;bottom:16px;width:2px;box-shadow:0 0 11px #dcffe7b0}
+.fp-lyric-body,.fp-line-plain,.fp-line-progress,.fp-line-words{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+.fp-line-plain{color:#f5fff9}
+.fp-line-progress,.fp-word{
+  --fill:0%;
+  color:transparent;
+  background-image:linear-gradient(90deg,var(--aurelis-lyric-lit) 0%,var(--aurelis-lyric-lit) var(--fill),var(--aurelis-lyric-dim) var(--fill),var(--aurelis-lyric-dim) 100%);
+  background-repeat:no-repeat;
+  background-clip:text;-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent
+}
+.fp-lyric.active .fp-line-progress,
+.fp-lyric.active .fp-word{filter:drop-shadow(0 0 6px #d6ffec20)}
+.fp-lyric.past .fp-line-progress,.fp-lyric.past .fp-word{--aurelis-lyric-dim:#ffffff87}
+.fp-lyric-roman,.fp-lyric-sub{
+  max-width:100%;overflow-wrap:anywhere;
+  white-space:pre-wrap;line-height:1.55!important;
+  font-size:clamp(11px,calc(var(--aurelis-lyric-size)*.4),15px)!important;
+  letter-spacing:0;font-weight:500;
+  margin-top:8px
+}
+.fp-translation-credit{display:block;padding:0 6px 18px 0;line-height:1.6;overflow-wrap:anywhere}
+.fp-floating-tools{right:8px;bottom:12px}
+@media(max-width:480px){
+  .fp-shell{padding-left:clamp(20px,6vw,28px);padding-right:clamp(20px,6vw,28px)}
+  .fp-main{padding-top:12px}
+  .fp-lyrics-pane{padding-left:8px;padding-right:12px;padding-bottom:max(100px,15vh)}
+  .fp-lyric{padding-top:10px!important;padding-bottom:15px!important}
+  .fp-lyric.active:before{left:-8px}
+}
+@media(max-height:690px){
+  .fp-lyrics-pane{padding-bottom:85px}
+  .fp-lyric{line-height:1.3!important;padding:8px 2px 11px 0!important}
+  .fp-floating-tools{bottom:2px}
+}
+@media(prefers-reduced-motion:reduce){.fp-lyric{transition:none!important;filter:none!important}}
