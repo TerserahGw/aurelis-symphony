@@ -1,0 +1,110 @@
+/* Aurelis 2.7 — tactile, coordinated motion system with battery-aware reveals.
+ * All durations share a rhythm; transforms/opacity are compositor-friendly.
+ * Preserve real word timestamps: do not add time-filled lyrics to plain LRC. */
+:root{
+ --aurelis-motion-spring:cubic-bezier(.17,.84,.19,1);
+ --aurelis-motion-decel:cubic-bezier(.2,.75,.22,1);
+ --aurelis-motion-emphasize:cubic-bezier(.22,1,.36,1);
+ --aurelis-motion-fast:185ms;
+ --aurelis-motion-medium:330ms;
+ --aurelis-motion-long:520ms;
+}
+@keyframes v27-stage-enter{0%{opacity:.45;transform:translate3d(0,13px,0) scale(.99)}100%{opacity:1;transform:none}}
+@keyframes v27-item-enter{0%{opacity:0;transform:translate3d(0,15px,0) scale(.965);filter:blur(3px)}100%{opacity:1;transform:none;filter:none}}
+@keyframes v27-lyric-focus{0%{opacity:.58;transform:translate3d(0,9px,0) scale(.985)}65%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes v27-ambient-breathe{0%{opacity:.46;transform:translate3d(0,3px,0) scale(.995)}100%{opacity:1;transform:none}}
+@keyframes v27-tap{0%{transform:scale(1)}40%{transform:scale(.93)}100%{transform:scale(1)}}
+#view.v27-page-enter>.heading-page,#view.v27-page-enter>.eyebrow,
+#view.v27-page-enter>.feature-hero{
+ animation:v27-stage-enter .52s var(--aurelis-motion-emphasize) both;
+}
+#view.v27-page-enter>.heading-page~section,
+#view.v27-page-enter>.chip-row{animation:v27-stage-enter .58s var(--aurelis-motion-spring) .07s both}
+.v27-scroll-item{
+ opacity:1;transform:none;filter:none;
+ transition:transform var(--aurelis-motion-long) var(--aurelis-motion-spring),
+            opacity .48s ease,filter .45s ease;
+}
+.v27-scroll-item.v27-pending{opacity:.28;transform:translate3d(0,12px,0) scale(.987);filter:blur(1.5px)}
+.v27-scroll-item.v27-visible{opacity:1;transform:none;filter:none}
+.v27-scroll-item.v27-exiting{opacity:.62;transform:translate3d(0,-4px,0) scale(.99)}
+.music-card,.track-row,.playlist-card,.fp-queue-row{
+ transform-origin:center center;
+ backface-visibility:hidden;
+}
+.music-card:hover,.playlist-card:hover{box-shadow:0 18px 48px rgba(0,0,0,.17)}
+.music-card:active,.playlist-card:active{transform:translate3d(0,1px,0) scale(.974)!important}
+button{touch-action:manipulation}
+button:not(:disabled):active{transition-duration:95ms}
+.song-popover{
+ transform-origin:var(--aurelis-pop-origin,85% 0%);
+ animation:v27-stage-enter .25s var(--aurelis-motion-spring) both!important;
+}
+.song-popover.v27-exit-ghost{
+ pointer-events:none!important;
+ overflow:hidden!important;
+}
+.song-popover .pop-btn{
+ transition:background-color .21s ease,color .22s ease,transform .25s var(--aurelis-motion-spring),
+            box-shadow .24s ease;
+}
+.song-popover .pop-btn:hover{box-shadow:inset 0 0 0 1px rgba(229,255,238,.07)}
+.song-popover .pop-btn:active{transform:scale(.956) translateX(1px)}
+.asp-panel{transition:transform .55s var(--aurelis-motion-spring),opacity .3s ease!important}
+.asp-nav button,.asp-switch,.asp-control select{transition:transform .27s var(--aurelis-motion-spring),background-color .2s ease,box-shadow .25s ease!important}
+.asp-nav button:active{transform:scale(.96)}
+.asp-scroll{scroll-behavior:smooth}
+.fp-shell{transition:transform .63s var(--aurelis-motion-spring),opacity .45s ease!important}
+.full-player.closing .fp-shell{transition:transform .38s cubic-bezier(.43,0,.63,.25),opacity .32s ease!important}
+.full-player.open .fp-shell{transition-delay:15ms}
+.fp-pane.current{animation:v27-stage-enter .48s var(--aurelis-motion-emphasize) both!important}
+.fp-lyric{transition:opacity .58s,filter .48s,color .52s,transform .63s var(--aurelis-motion-spring)!important}
+.fp-lyric.active .fp-lyric-body{animation:v27-lyric-focus .55s var(--aurelis-motion-spring) both!important}
+.fp-lyric.active .fp-lyric-roman,.fp-lyric.active .fp-lyric-sub{
+ animation:v27-ambient-breathe .58s var(--aurelis-motion-spring) both;
+}
+.fp-word{
+ background-position:0 0;
+ font-kerning:normal;
+ font-variant-ligatures:none;
+ transition:filter .18s ease,text-shadow .21s ease,transform .24s var(--aurelis-motion-spring)!important;
+}
+.fp-word.singing{filter:drop-shadow(0 0 5px rgba(230,255,237,.25))}
+.fp-word.sung{filter:none}
+.fp-line-plain{background:none!important;-webkit-text-fill-color:inherit!important}
+.fp-round:active,.fp-icon:active{animation:v27-tap .26s ease}
+.fp-queue-row{transition:background .26s ease,transform .37s var(--aurelis-motion-spring)}
+.fp-queue-row:active{transform:scale(.984)}
+.island-wash{transition:opacity .68s ease,transform .8s var(--aurelis-motion-spring)!important}
+.mobile-nav .island-nav,.mobile-nav .island-search{
+ transition:flex-basis .66s var(--aurelis-motion-spring),border-radius .66s var(--aurelis-motion-spring),
+            background .4s ease,box-shadow .4s ease!important;
+}
+.mobile-nav .island-nav button[data-nav]{
+ transition:opacity .31s ease,transform .54s var(--aurelis-motion-spring),background .31s,color .31s!important;
+}
+.mobile-nav .island-search-form{transition:opacity .31s .07s,transform .63s var(--aurelis-motion-spring),visibility .31s!important}
+.player-shell{transition:opacity .4s ease,transform .52s var(--aurelis-motion-spring),box-shadow .38s ease,bottom .22s!important}
+@media(max-width:800px){
+ .mobile-nav.is-searching .island-search{box-shadow:0 16px 50px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.18)!important}
+ .player-shell .player-cover{transition:transform .4s var(--aurelis-motion-spring)}
+ .player-shell:active .player-cover{transform:scale(.92)}
+ .fp-lyric.active{transform:translate3d(0,0,0) scale(1)!important}
+}
+@media(prefers-reduced-motion:reduce){
+ .v27-scroll-item,.v27-scroll-item.v27-pending,.v27-scroll-item.v27-exiting{
+    opacity:1!important;transform:none!important;filter:none!important;
+ }
+ .v27-page-enter>*,.fp-lyric.active .fp-lyric-body,.song-popover,.fp-pane.current{
+    animation:none!important;
+ }
+ .mobile-nav .island-nav,.mobile-nav .island-search,.mobile-nav .island-search-form,
+ .fp-shell,.player-shell{transition:none!important}
+}
+.aurelis-reduce-motion .v27-scroll-item,
+.aurelis-reduce-motion .v27-scroll-item.v27-pending,
+.aurelis-reduce-motion .v27-scroll-item.v27-exiting{
+ opacity:1!important;filter:none!important;transform:none!important;transition:none!important;
+}
+.aurelis-reduce-motion .fp-lyric.active .fp-lyric-body,
+.aurelis-reduce-motion #view.v27-page-enter>*{animation:none!important}
