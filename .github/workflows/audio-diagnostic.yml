@@ -36,5 +36,22 @@ jobs:
           done
           echo '=== SERVER LOG (diagnostic) ==='
           tail -n 25 /tmp/aurelis-server.log
+          echo '=== AUDIUS PUBLIC API DIAGNOSTIC ==='
+          python3 - <<'PY'
+          import urllib.request,json
+          base='https://api.audius.co/v1'
+          try:
+            with urllib.request.urlopen(base+'/tracks/trending?limit=2&app_name=AurelisSymphony',timeout=15) as r:
+              data=json.load(r).get('data',[])
+              print('Audius search status',r.status,'tracks',len(data))
+            if data:
+              tid=data[0]['id']
+              print('Audius sample:',tid,data[0].get('title','')[:60])
+              req=urllib.request.Request(base+'/tracks/'+tid+'/stream?app_name=AurelisSymphony',headers={'Range':'bytes=0-1023'})
+              with urllib.request.urlopen(req,timeout=18) as r:
+                print('Audius audio status:',r.status,'type:',r.headers.get('Content-Type'),'bytes:',len(r.read(1024)))
+          except Exception as exc:
+            print('Audius connectivity failed:',type(exc).__name__,str(exc)[:200])
+          PY
           kill $(cat /tmp/aurelis.pid) || true
           exit 0
