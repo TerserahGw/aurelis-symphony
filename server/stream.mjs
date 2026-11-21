@@ -1,150 +1,229 @@
-// Experimental direct-audio relay. Not an official YouTube playback integration.
-// Uses only public, playable format URLs returned by youtubei.js. Never handles
-// DRM, authentication cookies, paywalls, PoToken forgery, or untrusted target URLs.
-import { Readable } from 'node:stream';
+// Aurelis v2.2 experimental native-audio proxy for accessible YouTube.js formats.
+// No cookies, DRM bypass, CAPTCHA solving, PoToken forging, or arbitrary URL proxy.
+// Status and diagnostics use HTTP 424 (Failed Dependency) to distinguish an
+// unavailable upstream format from an origin crash / reverse-proxy HTTP 502.
+import { once } from 'node:events';
+import { Script } from 'node:vm';
 import { Innertube, Platform } from 'youtubei.js';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
-const ttlMs = 150_000;
-const cache = new Map();
-let ytPromise;
+const FORMAT_TTL = 90_000;
+const formatCache = new Map();
+const MAX_STREAMS = Math.min(12, Math.max(1, Number(process.env.AURELIS_MAX_STREAMS) || 4));
+const STREAM_ENABLED = process.env.AURELIS_DIRECT_AUDIO !== 'false';
+const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL !== 'false';
 let active = 0;
-const maxStreams = Math.max(1, Math.min(12, Number(process.env.AURELIS_MAX_STREAMS) || 5));
-const enabled = process.env.AURELIS_DIRECT_AUDIO !== 'false';
+let clientPromise;
+const stats = { ok:0, failed:0, lastError:null, lastAt:null };
 
-if (process.env.AURELIS_STREAM_EVAL === 'true') {
-  // Requires explicit operator opt-in: evaluates deciphering scripts supplied
-  // by the upstream platform. Follow YouTube.js's documented shim mechanism.
-  Platform.shim.eval = async data => new Function(data.output)();
+if (DECIPHER_ENABLED) {
+  // YouTube.js requires a JS interpreter for signature deciphering. Execute
+  // only the library-generated script in an isolated context with a time limit.
+  // Node VM is not a complete security boundary; disable with
+  // AURELIS_STREAM_EVAL=false when this risk is unacceptable.
+  Platform.shim.eval = async (data) => {
+    const body = String(data?.output || '');
+    if (body.length > 180_000) throw new Error('Player interpreter script too large');
+    const script = new Script('(function(){\n' + body + '\n})()');
+    return script.runInNewContext(Object.create(null), { timeout: 850, microtaskMode:'afterEvaluate' });
+  };
 }
-function remoteIsAllowed(raw) {
+export function allowedMediaHost(raw) {
   try {
-    const u = new URL(raw);
-    return u.protocol === 'https:' && (u.hostname === 'googlevideo.com' || u.hostname.endsWith('.googlevideo.com'));
+    const url = new URL(raw);
+    return url.protocol === 'https:' &&
+      (url.hostname === 'googlevideo.com' || url.hostname.endsWith('.googlevideo.com'));
   } catch { return false; }
 }
-function idFromPath(p) {
-  const match = /^\/api\/v2\/audio\/(?:yt-)?([a-zA-Z0-9_-]{11})$/.exec(p);
-  return match?.[1] || null;
+export function validSingleRange(range) {
+  return !range || /^bytes=(?:\d+-\d*|-\d+)$/.test(range);
 }
-function requestError(code, message) {
-  const e = new Error(message); e.code = code; return e;
+function makeError(code, message, detail) {
+  const error = new Error(message);
+  error.code = code;
+  error.detail = detail;
+  return error;
 }
-function client() {
-  if (!ytPromise) {
-    ytPromise = Innertube.create({ lang: 'en', generate_session_locally: true })
-      .catch(error => { ytPromise = undefined; throw error; });
+function redact(error) {
+  const msg = String(error?.message || error).slice(0, 150);
+  return msg.replace(/https?:\/\/\S+/g, '[upstream-url]');
+}
+function json(res, status, data) {
+  if (res.headersSent) return;
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+  res.end(JSON.stringify(data));
+}
+async function tube() {
+  if (!clientPromise) {
+    clientPromise = Innertube.create({ lang:'en', generate_session_locally: true })
+      .catch(error => { clientPromise = null; throw error; });
   }
-  return ytPromise;
+  return clientPromise;
 }
-async function resolve(id) {
-  const hit = cache.get(id);
-  if (hit && hit.until > Date.now()) return hit;
-  // No credentials or access-control workarounds; the format must be available.
-  const yt = await client();
+async function formatFor(id, force = false) {
+  const hit = formatCache.get(id);
+  if (!force && hit && hit.expires > Date.now()) return hit.url;
+  const yt = await tube();
   let format;
   try {
-    format = await yt.getStreamingData(id, { type: 'audio', quality: 'best', format: 'mp4' });
+    format = await yt.getStreamingData(id, { type:'audio', quality:'best', format:'mp4' });
   } catch (first) {
-    try { format = await yt.getStreamingData(id, { type: 'audio', quality: 'best', format: 'any' }); }
-    catch { throw requestError('format_unavailable', 'No accessible audio format was returned for this track.'); }
+    try {
+      format = await yt.getStreamingData(id, { type:'audio', quality:'best', format:'any' });
+    } catch (second) {
+      throw makeError('format_unavailable',
+        'YouTube.js tidak memberikan format audio yang dapat diputar.', redact(second));
+    }
   }
-  if (!remoteIsAllowed(format?.url)) throw requestError('unsupported_delivery', 'The available format cannot be relayed as direct HTTP audio.');
-  const result = { url: format.url, until: Date.now() + ttlMs };
-  if (cache.size > 48) cache.delete(cache.keys().next().value);
-  cache.set(id, result);
-  return result;
+  if (!allowedMediaHost(format?.url)) {
+    throw makeError('format_unsupported', 'Format audio tidak tersedia sebagai HTTP audio biasa.');
+  }
+  if (formatCache.size > 60) formatCache.delete(formatCache.keys().next().value);
+  formatCache.set(id, { url:format.url, expires:Date.now()+FORMAT_TTL });
+  return format.url;
 }
-async function fetchRemote(url, opts) {
-  for (let i = 0; i < 3; i++) {
-    if (!remoteIsAllowed(url)) throw requestError('blocked_upstream', 'Unexpected upstream host.');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000);
-    let result;
-    try { result = await fetch(url, { ...opts, redirect: 'manual', signal: controller.signal }); }
-    finally { clearTimeout(timer); }
-    if ([301,302,303,307,308].includes(result.status)) {
-      const next = result.headers.get('location');
-      if (!next) throw requestError('unexpected_redirect', 'Upstream redirected without a destination.');
-      url = new URL(next, url).href;
-      await result.body?.cancel();
+async function upstreamFetch(url, range, signal) {
+  for (let redirects=0; redirects<3; redirects++) {
+    if (!allowedMediaHost(url)) throw makeError('upstream_host_blocked', 'Host sumber audio tidak diizinkan.');
+    const timeout = AbortSignal.timeout(12_000);
+    const res = await fetch(url, {
+      headers: {
+        ...(range ? {'Range':range} : {}),
+        'Accept-Encoding':'identity'
+      },
+      signal:AbortSignal.any([signal,timeout]),
+      redirect:'manual'
+    });
+    if ([301,302,303,307,308].includes(res.status)) {
+      const next = res.headers.get('location');
+      await res.body?.cancel();
+      if (!next) throw makeError('upstream_redirect', 'Redirect sumber audio tidak valid.');
+      url = new URL(next,url).href;
       continue;
     }
-    return result;
+    return res;
   }
-  throw requestError('redirect_limit', 'Too many upstream redirects.');
+  throw makeError('upstream_redirect_limit', 'Redirect sumber audio terlalu banyak.');
+}
+function inspect(response, range) {
+  if (response.status===403 || response.status===410) throw makeError('source_denied','Sumber menolak akses audio (403/410).');
+  if (![200,206].includes(response.status) || !response.body) {
+    throw makeError('upstream_status','Sumber audio tidak mengembalikan data media.',String(response.status));
+  }
+  if (range && response.status!==206) {
+    throw makeError('range_not_supported','Sumber tidak mengizinkan seek/range audio.');
+  }
+  if (response.status===206 && !/^bytes \d+-\d+\/(?:\d+|\*)$/.test(response.headers.get('content-range') || '')) {
+    throw makeError('range_invalid','Sumber mengembalikan Content-Range yang tidak valid.');
+  }
+  const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!/^(audio\/(mp4|mpeg|webm|ogg|aac|x-m4a)|video\/(mp4|webm)|application\/octet-stream)$/.test(type)) {
+    throw makeError('invalid_content_type','Sumber tidak mengembalikan format media HTML5.',type);
+  }
+  return type==='application/octet-stream' ? 'audio/mp4' : type;
+}
+function pathId(path) {
+  return /^\/api\/v2\/audio\/(?:yt-)?([a-zA-Z0-9_-]{11})$/.exec(path)?.[1] || '';
 }
 export function directAudioStatus() {
-  return { enabled, mode: 'experimental-unofficial-audio', active, maxConcurrent: maxStreams,
-    evaluatorEnabled: process.env.AURELIS_STREAM_EVAL === 'true',
-    notice: 'Direct YouTube audio can fail or conflict with YouTube terms. No bypass is implemented.' };
+  return {
+    enabled: STREAM_ENABLED, mode:'experimental-native-audio',
+    active, maxConcurrent:MAX_STREAMS,
+    evaluatorEnabled:DECIPHER_ENABLED,
+    evaluator:'node-vm-limited',
+    probe:'GET /api/v2/audio/:id?probe=1',
+    successfulResponses:stats.ok,
+    failedResponses:stats.failed,
+    lastError:stats.lastError,
+    lastErrorAt:stats.lastAt,
+    notice:'Format dari YouTube.js tidak selalu tersedia. Tanpa embed, cookies, atau bypass DRM.'
+  };
 }
-export async function relayAudio(req, res, pathname) {
-  const id = idFromPath(pathname);
-  if (!id || !VIDEO_ID.test(id)) return jsonError(res, 400, 'invalid_video_id', 'Invalid YouTube video ID.');
-  if (!enabled) return jsonError(res, 403, 'direct_audio_disabled', 'The operator disabled experimental direct audio.');
-  if (active >= maxStreams) return jsonError(res, 503, 'stream_capacity', 'Stream capacity reached.');
-  const requestedRange = req.headers.range || '';
-  if (requestedRange && !/^bytes=\d*-\d*$/.test(requestedRange))
-    return jsonError(res, 416, 'invalid_range', 'Only one byte range is supported.');
+export async function relayAudio(req, res, pathname, searchParams = new URLSearchParams()) {
+  const id = pathId(pathname);
+  if (!VIDEO_ID.test(id)) return json(res,400,{ok:false,code:'invalid_id',message:'ID lagu tidak valid.'});
+  if (!STREAM_ENABLED) return json(res,403,{ok:false,code:'disabled',message:'Streaming audio eksperimental dimatikan.'});
+  if (!validSingleRange(req.headers.range)) return json(res,416,{ok:false,code:'invalid_range',message:'Range audio harus tunggal.'});
+  if (active>=MAX_STREAMS) return json(res,429,{ok:false,code:'busy',message:'Sumber audio sedang sibuk, coba lagi.'});
+  const probe = searchParams.get('probe')==='1';
+  const range = probe ? 'bytes=0-16383' : (req.headers.range || 'bytes=0-');
+  const abort = new AbortController();
+  let disposed = false, reader, started = false, response;
+  const onClose = () => { if (!res.writableEnded) { disposed=true; abort.abort(); reader?.cancel().catch(()=>{}); } };
+  res.on('close',onClose);
   active++;
-  const controller = new AbortController();
-  res.on('close', () => controller.abort());
   try {
-    const entry = await resolve(id);
-    let upstream = await fetchRemote(entry.url, {
-      headers: { ...(requestedRange ? { Range: requestedRange } : {}), 'Accept-Encoding': 'identity' }
-    });
-    if ([403, 410].includes(upstream.status)) {
-      cache.delete(id);
-      return jsonError(res, 502, 'upstream_restricted', 'Source rejected the stream URL (403/410).');
+    let url = await formatFor(id);
+    // Stale signed format URLs are refreshed once. No attestation bypass.
+    for (let attempt=0; attempt<2; attempt++) {
+      response = await upstreamFetch(url,range,abort.signal);
+      if (![403,410].includes(response.status) || attempt===1) break;
+      await response.body?.cancel();
+      formatCache.delete(id);
+      url = await formatFor(id,true);
     }
-    if (![200,206].includes(upstream.status) || !upstream.body) {
-      return jsonError(res, 502, 'upstream_unavailable', 'Upstream did not provide a playable audio response.');
+    const mime = inspect(response,range);
+    reader = response.body.getReader();
+    // Read first bytes *before* writing HTTP headers. This prevents Cloudflare
+    // receiving a 206 with an empty/truncated body if upstream fails immediately.
+    const first = await Promise.race([
+      reader.read(),
+      new Promise((_,reject)=>setTimeout(()=>reject(makeError('first_byte_timeout','Sumber audio tidak mengirim byte pertama.')),12_000))
+    ]);
+    if (first.done || !first.value?.byteLength) {
+      throw makeError('empty_stream','Sumber audio tidak menghasilkan data.');
     }
-    if (requestedRange && upstream.status !== 206) {
-      await upstream.body.cancel();
-      return jsonError(res, 502, 'upstream_range_unsupported', 'Upstream does not support the requested audio byte range.');
+    if (probe) {
+      await reader.cancel().catch(()=>{});
+      stats.ok++;
+      return json(res,200,{ok:true,mode:'experimental-native-audio',mime,rangeSupported:response.status===206,
+        firstBytes:first.value.byteLength,codecAvailability:'unverified'});
     }
-    const type = upstream.headers.get('content-type') || '';
-    if (!/(audio\/|video\/webm|application\/octet-stream)/i.test(type)) {
-      await upstream.body.cancel();
-      return jsonError(res, 502, 'invalid_media_type', 'Upstream returned an unexpected media format.');
-    }
-    const headers = {
-      'Content-Type': type,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
+    const out = {
+      'Content-Type': mime,
+      'Cache-Control':'no-store',
+      'Accept-Ranges':'bytes',
+      'X-Content-Type-Options':'nosniff'
     };
-    for (const key of ['content-length', 'content-range']) {
-      const value = upstream.headers.get(key);
-      if (value) headers[key] = value;
+    const cr = response.headers.get('content-range');
+    const cl = response.headers.get('content-length');
+    if (response.status===206 && cr) out['Content-Range']=cr;
+    if (cl && /^\d+$/.test(cl)) out['Content-Length']=cl;
+    if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(response.status,out); return res.end(); }
+    res.writeHead(response.status,out);
+    started = true;
+    let bytes = 0;
+    let chunk = first.value;
+    while (!disposed) {
+      if (chunk?.byteLength) {
+        bytes+=chunk.byteLength;
+        if (!res.write(chunk)) await Promise.race([once(res,'drain'),once(res,'close')]);
+      }
+      const next = await reader.read();
+      if (next.done) break;
+      chunk = next.value;
     }
-    res.writeHead(upstream.status, headers);
-    if (req.method === 'HEAD') {
-      await upstream.body.cancel();
-      return res.end();
+    if (!disposed) {
+      if (out['Content-Length'] && bytes!==Number(out['Content-Length'])) {
+        throw makeError('truncated_upstream','Transfer audio terhenti sebelum seluruh byte terkirim.');
+      }
+      stats.ok++;
+      res.end();
     }
-    const stream = Readable.fromWeb(upstream.body);
-    await new Promise((resolve, reject) => {
-      stream.on('error', reject);
-      res.on('error', reject);
-      stream.on('end', resolve);
-      stream.pipe(res);
-      controller.signal.addEventListener('abort', () => { stream.destroy(); resolve(); }, { once:true });
-    });
   } catch (e) {
-    if (!res.headersSent) jsonError(res, 502, e.code || 'audio_unavailable', String(e.message || 'Direct playback failed.').slice(0, 180));
-    else res.destroy();
-    console.warn('Direct audio:', id, e.code || e.name, String(e.message).slice(0, 140));
+    stats.failed++;
+    stats.lastError=e.code || 'audio_error';
+    stats.lastAt=new Date().toISOString();
+    console.warn('[aurelis-audio]',id,stats.lastError,redact(e),e.detail || '');
+    if (!res.headersSent) json(res,424,{ok:false,code:stats.lastError,
+      message:e?.message?.startsWith('Sumber') || e?.message?.startsWith('YouTube')
+        ? e.message : 'Streaming audio dari sumber saat ini tidak tersedia.',
+      retryable:true});
+    else { if (!res.destroyed) res.destroy(); }
   } finally {
     active--;
-    if (!res.writableEnded) res.end();
+    res.off('close',onClose);
+    if (!started && reader) await reader.cancel().catch(()=>{});
+    if (!res.writableEnded && !res.destroyed) res.end();
   }
-}
-function jsonError(res, status, code, message) {
-  if (res.headersSent) return;
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify({ ok:false, error:code, message }));
 }
