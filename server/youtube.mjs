@@ -157,6 +157,39 @@ export function parsePlaylistId(raw) {
     return PLAYLIST_ID.test(id) && !/^(RD|UL)/.test(id) ? id : null;
   } catch { return null; }
 }
+// Modern playlist items use LockupView rather than the older PlaylistVideo.
+function playlistArtist(node) {
+  const rows = node.metadata?.metadata?.metadata_rows || [];
+  const parts = rows.flatMap(row => row.metadata_parts || []);
+  const linked = parts.find(part => {
+    const text = part.text;
+    const endpoints = [text?.endpoint, ...(text?.runs || []).map(run => run.endpoint)];
+    return endpoints.some(ep => /^UC[A-Za-z0-9_-]+$/.test(ep?.payload?.browseId || '') ||
+      /^\/@|^\/channel\//.test(ep?.metadata?.url || ''));
+  });
+  const value = readText(linked?.text || parts[0]?.text).trim();
+  return value && value !== 'N/A' && !/^(?:[\d,.]+\s*[KMB]?\s+(?:views?|videos?)|\d+\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago)$/i.test(value) ? value : '';
+}
+function normalizePlaylistItem(node) {
+  if (!node || typeof node !== 'object' || node.is_playable === false) return null;
+  if (node.content_type && !['VIDEO','SHORT','UNSPECIFIED'].includes(node.content_type)) return null;
+  const id = [node.video_id,node.videoId,node.id,node.content_id,
+    node.endpoint?.payload?.videoId,node.renderer_context?.command_context?.on_tap?.payload?.videoId,
+    node.on_tap_endpoint?.payload?.videoId,node.inline_player_data?.payload?.videoId]
+    .find(value => typeof value === 'string' && VIDEO_ID.test(value));
+  if (!id) return null;
+  const title = readText(node.title || node.name || node.metadata?.title || node.overlay_metadata?.primary_text).trim();
+  if (!title || title === 'N/A') return null;
+  const track = normalize({
+    video_id:id, title, artists:node.artists,
+    author:node.author || node.artist || node.owner || playlistArtist(node),
+    album:node.album, duration:node.duration || node.length,
+    thumbnails:node.thumbnails || node.content_image?.image || node.content_image?.primary_thumbnail?.image ||
+      node.thumbnail_view_model?.image || node.thumbnail
+  });
+  if (track && !track.artwork) track.artwork = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+  return track;
+}
 export async function collectPlaylist(yt, id, limit = 1000, request = p => timeout(p)) {
   if (!PLAYLIST_ID.test(id) || !Number.isInteger(limit) || limit < 1 || limit > 1000)
     throw new Error('Invalid playlist arguments');
@@ -178,6 +211,7 @@ export async function collectPlaylist(yt, id, limit = 1000, request = p => timeo
   };
   const tracks = [];
   let scanned = 0, skipped = 0, pages = 0, truncated = false;
+  let unavailable = 0, unrecognized = 0;
   for (;;) {
     pages++;
     const items = page.items;
@@ -186,8 +220,9 @@ export async function collectPlaylist(yt, id, limit = 1000, request = p => timeo
     for (const item of items) {
       if (scanned >= limit) { truncated = true; break; }
       scanned++;
-      const track = normalize(item);
-      if (!track || item.is_playable === false) { skipped++; continue; }
+      if (item?.is_playable === false) { skipped++; unavailable++; continue; }
+      const track = normalizePlaylistItem(item);
+      if (!track) { skipped++; unrecognized++; continue; }
       const reported = Number.parseInt(readText(item.index), 10);
       tracks.push({...track, position: Number.isInteger(reported) && reported > 0 ? reported : scanned,
         streamUrl: '/api/v2/audio/' + track.videoId,
@@ -198,8 +233,9 @@ export async function collectPlaylist(yt, id, limit = 1000, request = p => timeo
     if (scanned >= limit || pages >= 20) { truncated = true; break; }
     page = await wait(() => page.getContinuation());
   }
+  if (!tracks.length && unrecognized) throw new Error('Playlist parser could not recognize any playable entries (' + unrecognized + ')');
   if (!playlist.artwork) playlist.artwork = tracks[0]?.artwork || '';
-  return {ok:true, playlist, tracks, count:tracks.length, scanned, skipped, truncated,
+  return {ok:true, playlist, tracks, count:tracks.length, scanned, skipped, skippedReasons:{unavailable,unrecognized}, truncated,
     notice:'Metadata only; stream URLs are relative to Aurelis and playback is not guaranteed.'};
 }
 let activePlaylistImports = 0;

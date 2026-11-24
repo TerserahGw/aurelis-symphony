@@ -11,7 +11,7 @@ import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
 import { romanizeBatch } from './server/romanize.mjs';
 
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.7.2';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -211,6 +211,7 @@ async function api(req, res, url, head) {
     catch (e) {
       if (e.status === 429) return apiError(res,429,'playlist_busy','Importer busy; retry later.',head);
       console.warn('Playlist import failed:',e.message);
+      if (e.message.startsWith('Playlist parser could not recognize')) return apiError(res,502,'playlist_parse_failed','Playlist was found, but no track metadata could be parsed.',head);
       return apiError(res,503,'playlist_unavailable','Playlist may be private, unavailable, or blocked by YouTube. Retry later.',head);
     }
   }

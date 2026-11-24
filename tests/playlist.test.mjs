@@ -24,3 +24,34 @@ test('failed continuation is not reported as complete',async()=>{
   const yt={getPlaylist:async()=>({info:{title:'Demo'},items:[video],has_continuation:true,getContinuation:async()=>{throw Error('blocked')}})};
   await assert.rejects(collectPlaylist(yt,id),/blocked/);
 });
+
+test('modern YouTube.js 18.3 LockupView playlist: all 39 tracks in order',async()=>{
+  const lockup=(i)=>({
+    content_type:'VIDEO',content_id:'DCYmJDO2_IE',
+    metadata:{title:{text:'Song '+i},metadata:{metadata_rows:[
+      {metadata_parts:[{text:{text:'Artist '+i,endpoint:{payload:{browseId:'UC123456789'}}}}]},
+      {metadata_parts:[{text:{text:'1M views'}}]}
+    ]}},
+    content_image:{image:[{url:'https://i.ytimg.com/vi/DCYmJDO2_IE/hqdefault.jpg'}]},
+    duration:{text:'3:25',seconds:205}
+  });
+  const entries=Array.from({length:39},(_,i)=>lockup(i+1));
+  const yt={getPlaylist:async()=>({info:{title:'Lagu 1',total_items:'39 videos'},items:entries,has_continuation:false})};
+  const r=await collectPlaylist(yt,id);
+  assert.equal(r.count,39);assert.equal(r.skipped,0);assert.equal(r.truncated,false);
+  assert.equal(r.tracks[0].videoId,'DCYmJDO2_IE');
+  assert.equal(r.tracks[0].artist,'Artist 1');assert.equal(r.tracks[0].duration,205);
+  assert.equal(r.tracks[38].title,'Song 39');assert.equal(r.tracks[38].position,39);
+  assert.equal(r.tracks[0].artwork,'https://i.ytimg.com/vi/DCYmJDO2_IE/hqdefault.jpg');
+});
+test('shorts and unsupported items are handled explicitly',async()=>{
+  const short={on_tap_endpoint:{payload:{videoId:'DCYmJDO2_IE'}},overlay_metadata:{primary_text:{text:'Short video'}},thumbnail:[{url:'https://i.ytimg.com/vi/DCYmJDO2_IE/default.jpg'}]};
+  const yt={getPlaylist:async()=>({info:{title:'Mixed'},items:[short,{content_type:'PLAYLIST',content_id:'DCYmJDO2_IE',metadata:{title:{text:'Not a song'}}},{...video,is_playable:false}],has_continuation:false})};
+  const r=await collectPlaylist(yt,id);
+  assert.equal(r.count,1);assert.equal(r.tracks[0].title,'Short video');
+  assert.deepEqual(r.skippedReasons,{unavailable:1,unrecognized:1});
+});
+test('unknown nonempty playlist does not return misleading success',async()=>{
+  const yt={getPlaylist:async()=>({info:{title:'Unknown'},items:[{type:'Unknown'}],has_continuation:false})};
+  await assert.rejects(collectPlaylist(yt,id),/could not recognize/);
+});

@@ -1,4 +1,8 @@
-# ✦ Aurelis Symphony 2.7.1
+# ✦ Aurelis Symphony 2.7.2
+
+## New in v2.7.2
+
+- Fix playlist metadata import for YouTube.js 18.3 LockupView and ShortsLockupView entries alongside legacy PlaylistVideo entries. The Developer Hub example now imports the full playlist by default. Unrecognized entries are reported separately; a nonempty playlist that cannot be parsed no longer returns a misleading successful empty result.
 
 ## New in v2.7.1
 
@@ -37,7 +41,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.1` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.2` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0
