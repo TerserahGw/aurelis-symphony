@@ -147,7 +147,7 @@
       if(url.origin!==location.origin)throw Error('Hanya endpoint dari domain Aurelis yang dapat diuji.');
       if(url.pathname.startsWith('/api/v2/audio/')&&url.searchParams.get('probe')!=='1')
         throw Error('Untuk audio biner gunakan playground. Endpoint tester hanya menjalankan ?probe=1.');
-      const opts={method,headers:{Accept:'application/json'},signal:AbortSignal.timeout(17000)};
+      const opts={method,headers:{Accept:'application/json'},signal:AbortSignal.timeout(url.pathname==='/api/v1/playlists/import'?30000:17000)};
       if(method==='POST'){
         const raw=card.querySelector('.docs-try-body')?.value||'{}';
         opts.headers['Content-Type']='application/json';

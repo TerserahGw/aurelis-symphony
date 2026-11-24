@@ -34,3 +34,13 @@ The YouTube.js decoder evaluator is **disabled by default**. Enabling AURELIS_ST
 YouTube's developer policies restrict isolated audio playback from YouTube content. For a compliant public service, use your own recordings, properly licensed audio, or an authorized integration. Search results do not provide redistribution rights.
 
 Local and personal-library routes remain backward compatible with Aurelis 2.0. No password login or advanced collaborative recommendations in this release.
+
+
+## Playlist import (v2.7.1)
+
+```sh
+curl -G 'https://aurelis-symphony.go.altare.global/api/v1/playlists/import' \
+  --data-urlencode 'url=https://youtube.com/playlist?list=PLEBFqiHTFkcY_ZCW2Sro17E5b_TCFIbZ3'
+```
+
+Returns `{ok, playlist, tracks, count, scanned, skipped, truncated, notice}`. Playlist fields: id, title, description, author, artwork, url, provider, totalItemsText (provider display text). Tracks use the existing search metadata shape plus position, streamUrl, playbackUrl and probeUrl. Resolve relative links against the Aurelis API origin. Missing metadata can be empty or zero. Source order and duplicate video IDs are preserved. `limit` defaults to 1000 (1–1000 entries scanned, including unavailable entries); `truncated` indicates more entries remain or the 20-page safety cap was reached. HTTP 400 invalid input, 429 busy/rate limit, 503 unavailable/upstream failure. No private playlists or generated mixes; no download or persistence. Metadata does not imply playable audio. Browser cross-origin callers require the existing AURELIS_CORS_ORIGIN setting.

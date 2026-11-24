@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Aurelis Symphony API",
-    "version": "2.7.0",
+    "version": "2.7.1",
     "description": "Aurelis Symphony 2.7: optional CJK lyric romanization, first-party playback URL resolution, HTTP Range audio relay for accessible streams, experimental YouTube audio, seven lyric sources, and ambient motion. No DRM/anti-bot circumvention."
   },
   "servers": [
@@ -677,6 +677,152 @@
           },
           "429": {
             "description": "Rate limited"
+          }
+        }
+      }
+    },
+    "/api/v1/playlists/import": {
+      "get": {
+        "summary": "Import public or unlisted YouTube playlist metadata",
+        "description": "Preserves source order and duplicate tracks. Skips unplayable entries. limit caps entries scanned, not successful tracks. Relative playback links do not guarantee streaming.",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "example": "https://youtube.com/playlist?list=PLEBFqiHTFkcY_ZCW2Sro17E5b_TCFIbZ3"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Playlist metadata, tracks, count, scanned, skipped and truncated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "playlist",
+                    "tracks",
+                    "count",
+                    "scanned",
+                    "skipped",
+                    "truncated"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "playlist": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "author": {
+                          "type": "string"
+                        },
+                        "artwork": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "totalItemsText": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "tracks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "videoId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "artist": {
+                            "type": "string"
+                          },
+                          "duration": {
+                            "type": "integer"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "artwork": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "streamUrl": {
+                            "type": "string"
+                          },
+                          "playbackUrl": {
+                            "type": "string"
+                          },
+                          "probeUrl": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "scanned": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid URL or limit"
+          },
+          "429": {
+            "description": "Rate limited or busy"
+          },
+          "503": {
+            "description": "Playlist unavailable or upstream error"
           }
         }
       }

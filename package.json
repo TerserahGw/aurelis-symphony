@@ -1,6 +1,6 @@
 {
   "name": "aurelis-symphony",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "type": "module",
   "description": "Accurate CJK lyric romanization, accessible stream API/docs and polished motion for Aurelis Symphony",

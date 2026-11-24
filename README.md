@@ -1,6 +1,10 @@
-# ✦ Aurelis Symphony 2.7.0
+# ✦ Aurelis Symphony 2.7.1
 
-## New in v2.7.0
+## New in v2.7.1
+
+- Public/unlisted YouTube and YouTube Music playlist importer: `GET /api/v1/playlists/import?url=...`. Returns playlist and ordered track metadata, video URLs and relative playback/probe URLs. Default and maximum 1000 entries scanned per request. Unavailable items are skipped; check `skipped` and `truncated`. No API key required with the existing YouTube.js importer; does not download or save tracks. See [API documentation](docs/API.md).
+
+## Previous v2.7.0
 
 - **Dictionary-enhanced romanization** through `POST /api/v2/romanize`: Japanese kanji readings (lazy Kuromoji + WanaKana), Korean Revised Romanization and Mandarin Pinyin. Lyric player batches requests, caches results by song and allows language override (auto / ja / ko / zh). Unknown Kanji readings are preserved instead of inventing readings.
 - **Motion overhaul:** smoother capsule FLIP morph, navigation transitions, popover/settings exit ghosts, active lyric transitions and GPU-bounded scroll reveals. Per-letter gradient progression is applied only when real per-word timestamps are available; plain line-timed lyrics remain plain highlights.
@@ -33,7 +37,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.0` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.1` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

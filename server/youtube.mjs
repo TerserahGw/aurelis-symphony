@@ -143,3 +143,82 @@ export function getSearchStatus() {
   return { backend: process.env.SEARCH_BACKEND || 'youtubei', provider: 'youtube', mode: 'metadata-and-experimental-audio',
     rawAudioProxy: true, unofficial: (process.env.SEARCH_BACKEND || 'youtubei') === 'youtubei' };
 }
+
+/* Public/unlisted playlist metadata importer; no per-video stream requests. */
+const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,100}$/;
+export function parsePlaylistId(raw) {
+  if (typeof raw !== 'string' || raw.length > 1000) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' || u.username || u.password || u.port ||
+        !['youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','youtu.be'].includes(u.hostname)) return null;
+    if (u.hostname === 'youtu.be' ? !/^\/[\w-]{11}$/.test(u.pathname) : !['/playlist','/watch'].includes(u.pathname)) return null;
+    const id = u.searchParams.get('list') || '';
+    return PLAYLIST_ID.test(id) && !/^(RD|UL)/.test(id) ? id : null;
+  } catch { return null; }
+}
+export async function collectPlaylist(yt, id, limit = 1000, request = p => timeout(p)) {
+  if (!PLAYLIST_ID.test(id) || !Number.isInteger(limit) || limit < 1 || limit > 1000)
+    throw new Error('Invalid playlist arguments');
+  const started = Date.now();
+  const wait = (fn) => {
+    if (Date.now() - started >= 24000) throw new Error('Playlist import timeout');
+    return request(fn());
+  };
+  let page = await wait(() => yt.getPlaylist(id));
+  const info = page.info || {};
+  const title = readText(info.title);
+  if (!title) throw new Error('Playlist metadata unavailable');
+  const playlist = {
+    id, title, description: readText(info.description),
+    author: readText(info.author?.name || info.author),
+    artwork: thumbnail(info),
+    url: 'https://www.youtube.com/playlist?list=' + id,
+    provider: 'youtube', totalItemsText: readText(info.total_items)
+  };
+  const tracks = [];
+  let scanned = 0, skipped = 0, pages = 0, truncated = false;
+  for (;;) {
+    pages++;
+    const items = page.items;
+    if (!Array.isArray(items)) throw new Error('Playlist items unavailable');
+    if (!items.length && page.has_continuation) throw new Error('Unexpected empty playlist page');
+    for (const item of items) {
+      if (scanned >= limit) { truncated = true; break; }
+      scanned++;
+      const track = normalize(item);
+      if (!track || item.is_playable === false) { skipped++; continue; }
+      const reported = Number.parseInt(readText(item.index), 10);
+      tracks.push({...track, position: Number.isInteger(reported) && reported > 0 ? reported : scanned,
+        streamUrl: '/api/v2/audio/' + track.videoId,
+        playbackUrl: '/api/v2/playback/' + track.id,
+        probeUrl: '/api/v2/audio/' + track.videoId + '?probe=1'});
+    }
+    if (truncated || !page.has_continuation) break;
+    if (scanned >= limit || pages >= 20) { truncated = true; break; }
+    page = await wait(() => page.getContinuation());
+  }
+  if (!playlist.artwork) playlist.artwork = tracks[0]?.artwork || '';
+  return {ok:true, playlist, tracks, count:tracks.length, scanned, skipped, truncated,
+    notice:'Metadata only; stream URLs are relative to Aurelis and playback is not guaranteed.'};
+}
+let activePlaylistImports = 0;
+const playlistCache = new Map();
+export async function importPlaylist(id, limit = 1000) {
+  const key = id + ':' + limit;
+  const cached = playlistCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.result;
+  if (activePlaylistImports >= 2) {
+    const e = new Error('Playlist importer busy'); e.status = 429; throw e;
+  }
+  activePlaylistImports++;
+  const deadline = Date.now() + 25000;
+  const boundedRequest = p => timeout(p, Math.max(1, Math.min(12000, deadline - Date.now())));
+  try {
+    const yt = await boundedRequest(client());
+    const result = await collectPlaylist(yt, id, limit, boundedRequest);
+    if (playlistCache.size >= 12) playlistCache.delete(playlistCache.keys().next().value);
+    playlistCache.set(key, {result, expires:Date.now()+TTL});
+    return result;
+  } finally { activePlaylistImports--; }
+}

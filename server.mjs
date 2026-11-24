@@ -4,14 +4,14 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { searchMusic, lookupYouTube, getSearchStatus } from './server/youtube.mjs';
+import { searchMusic, lookupYouTube, getSearchStatus, parsePlaylistId, importPlaylist } from './server/youtube.mjs';
 import { createRadio } from './server/recommend.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
 import { romanizeBatch } from './server/romanize.mjs';
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.7.1';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -198,6 +198,20 @@ async function api(req, res, url, head) {
     } catch (e) {
       console.warn('Discovery failed:', e.message);
       return response(res, 503, { error: 'search_unavailable', message: 'The music discovery service is temporarily unavailable.', tracks: [] }, head);
+    }
+  }
+  if (endpoint === '/api/v1/playlists/import') {
+    const id = parsePlaylistId(q.get('url'));
+    const rawLimit = q.get('limit') ?? '1000';
+    if (!id) return apiError(res,400,'invalid_playlist_url','Provide a public or unlisted HTTPS YouTube playlist URL.',head);
+    if (!/^\d{1,4}$/.test(rawLimit) || Number(rawLimit)<1 || Number(rawLimit)>1000)
+      return apiError(res,400,'invalid_limit','limit must be an integer from 1 to 1000.',head);
+    if (rateLimited(req)) return apiError(res,429,'rate_limited','Too many requests.',head);
+    try { return response(res,200,await importPlaylist(id,Number(rawLimit)),head); }
+    catch (e) {
+      if (e.status === 429) return apiError(res,429,'playlist_busy','Importer busy; retry later.',head);
+      console.warn('Playlist import failed:',e.message);
+      return apiError(res,503,'playlist_unavailable','Playlist may be private, unavailable, or blocked by YouTube. Retry later.',head);
     }
   }
   if (endpoint === '/api/v1/info') {
