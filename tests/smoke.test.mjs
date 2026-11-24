@@ -75,7 +75,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(up, true, 'server starts');
-    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.7.5');
+    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.7.6');
     const homepage=await (await fetch(base + '/')).text();
     assert.match(homepage,/assets\/v21\.js/);
     assert.match(homepage,/assets\/full-player\.js/);
@@ -107,7 +107,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.equal((await fetch(base+'/assets/motion-v27.js')).status,200);
     assert.match(homepage,/assets\/motion-v27\.js/);
     const openapi=await (await fetch(base+'/api/v1/openapi.json')).json();
-    assert.equal(openapi.info.version,'2.7.5');
+    assert.equal(openapi.info.version,'2.7.6');
     assert.ok(openapi.paths['/api/v2/playback/{id}']);
     assert.ok(openapi.paths['/api/v2/romanize']);
     assert.ok(openapi.paths['/api/v1/playlists/import']);

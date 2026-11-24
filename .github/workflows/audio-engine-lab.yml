@@ -40,3 +40,41 @@ jobs:
         run: python -m pip install 'pytubefix==11.2.2'
       - name: Probe audio bytes (Python)
         run: timeout 75s python scripts/audio-engine-lab/python_probe.py aqz-KE-bpKQ
+
+  newpipe-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build NewPipe runtime image
+        run: docker build -t aurelis-newpipe-lab .
+      - name: Probe actual audio bytes
+        run: |
+          set -o pipefail
+          timeout 70s docker run --rm --entrypoint java aurelis-newpipe-lab -Xmx192m -cp '/opt/aurelis-newpipe/lib/*' dev.aurelis.NewPipeAudioCli --probe aqz-KE-bpKQ | tee /tmp/newpipe-probe.json
+          python -c 'import json; d=json.loads(open("/tmp/newpipe-probe.json").read().strip().splitlines()[-1]); assert d["ok"] and d["bytes"]==4096, d'
+  ytdlp-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install 'yt-dlp[default]==2026.11.23'
+      - name: Probe actual audio bytes
+        run: |
+          python - <<'PY'
+          import subprocess, urllib.request, json
+          try:
+              url=subprocess.check_output(['yt-dlp','--ignore-config','--no-playlist','--no-cache-dir','--no-warnings','--socket-timeout','8','--retries','0','--extractor-retries','0','--js-runtimes','node','-f','bestaudio','--get-url','https://www.youtube.com/watch?v=aqz-KE-bpKQ'],timeout=30,stderr=subprocess.DEVNULL,text=True).strip()
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Range':'bytes=0-4095','Accept-Encoding':'identity'}),timeout=12) as r:
+                  n=len(r.read(4096)); mime=r.headers.get_content_type(); ok=r.status==206 and mime.startswith('audio/') and n==4096
+                  print(json.dumps({'engine':'yt-dlp','http':r.status,'bytes':n,'mime':mime,'ok':ok}))
+                  assert ok
+          except Exception as e:
+              print(json.dumps({'engine':'yt-dlp','ok':False,'errorType':type(e).__name__}))
+              raise SystemExit(1)
+          PY

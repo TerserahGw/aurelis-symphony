@@ -10,6 +10,7 @@ import { contentDisposition } from './download.mjs';
 import { relayOwnedAudio, ownedAudioStatus } from './owned-audio.mjs';
 import { youtubeCookie, authStatus } from './audio-auth.mjs';
 import { ytdlpEnabled, resolveYtdlp, isAccessChallenge } from './ytdlp-resolver.mjs';
+import { newpipeEnabled, resolveNewpipe } from './newpipe-resolver.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 const FORMAT_TTL = 90_000;
@@ -95,8 +96,17 @@ async function resolveFormat(id) {
     resolved={url:format.url,engine:'youtubei.js'};
   }catch(e){
     if(e.code==='youtube_access_required'||isAccessChallenge(e))throw makeError('youtube_access_required','YouTube requires verification or restricted access.');
-    if(!ytdlpEnabled||authStatus().enabled)throw makeError('format_unavailable','YouTube.js tidak memberikan format audio yang dapat diputar.',redact(e));
-    resolved={url:await resolveYtdlp(id),engine:'yt-dlp'};
+    if(authStatus().enabled)throw makeError('format_unavailable','YouTube.js tidak memberikan format audio yang dapat diputar.',redact(e));
+    let last=makeError('format_unavailable','YouTube.js tidak memberikan format audio yang dapat diputar.',redact(e));
+    if(ytdlpEnabled){
+      try{resolved={url:await resolveYtdlp(id),engine:'yt-dlp'};}
+      catch(err){if(err.code==='youtube_access_required')throw err;last=err;}
+    }
+    if(!resolved&&newpipeEnabled){
+      try{resolved={url:await resolveNewpipe(id),engine:'NewPipeExtractor'};}
+      catch(err){if(err.code==='youtube_access_required')throw err;last=err;}
+    }
+    if(!resolved)throw last;
   }
   if (formatCache.size > 60) formatCache.delete(formatCache.keys().next().value);
   formatCache.set(id, { format:resolved, expires:Date.now()+FORMAT_TTL });
@@ -169,7 +179,7 @@ export function directAudioStatus() {
     upstreamCooldownSeconds:Math.max(0,Math.ceil((upstreamCooldownUntil-Date.now())/1000)),
     evaluatorEnabled:DECIPHER_ENABLED,
     evaluator:'node-vm-limited',
-    engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled',ytDlp:ytdlpEnabled&&!authStatus().enabled?'enabled':'disabled'},
+    engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled',ytDlp:ytdlpEnabled&&!authStatus().enabled?'enabled':'disabled',newPipe:newpipeEnabled&&!authStatus().enabled?'enabled':'disabled'},
     lastEngine:stats.lastEngine, alternativeSuccess:stats.alternativeSuccess,
     probe:'GET /api/v2/audio/:id?probe=1',
     successfulResponses:stats.ok,
@@ -302,7 +312,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
         ? e.message : 'Streaming audio YouTube belum tersedia pada jaringan ini.',
       primaryCode:primaryError.code||'primary_unavailable',
       fallbackCode:e===primaryError?null:(e.code||'fallback_unavailable'),
-      enginesConfigured:['youtubei.js',...(ytdlpEnabled&&!authStatus().enabled?['yt-dlp']:[]),...(ALTERNATE_ENABLED?['@distube/ytdl-core']:[])],
+      enginesConfigured:['youtubei.js',...(ytdlpEnabled&&!authStatus().enabled?['yt-dlp']:[]),...(newpipeEnabled&&!authStatus().enabled?['NewPipeExtractor']:[]),...(ALTERNATE_ENABLED?['@distube/ytdl-core']:[])],
       retryable:true});
     else { if (!res.destroyed) res.destroy(); }
   } finally {

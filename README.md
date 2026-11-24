@@ -1,4 +1,9 @@
-# ✦ Aurelis Symphony 2.7.5
+# ✦ Aurelis Symphony 2.7.6
+
+## New in v2.7.6
+
+- Optional NewPipeExtractor v0.27.1 resolver in an isolated Java process with a bounded heap and timeout; exact video ID, no arbitrary user URL, no embed. Enable `AURELIS_NEWPIPE_FALLBACK=true` for ordinary format failures in anonymous mode. Explicit access denials stop the fallback chain. No guarantee of YouTube audio availability.
+- Docker packages the Java runtime and pinned NewPipe dependency. Independent CI probes verify media bytes on public Creative Commons test content; production readiness is separate from image build success.
 
 ## New in v2.7.5
 
@@ -54,7 +59,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.5` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.6` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

@@ -4,7 +4,7 @@
   const base=location.origin;
   const endpointGroups=[
     {label:'Sistem',items:[
-      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.7.5","runtime":"node"}'},
+      {id:'health',method:'GET',path:'/api/v1/health',description:'Status server, versi, runtime, dan waktu respons.',params:[],sample:'/api/v1/health',code:'{"ok":true,"service":"Aurelis Symphony","version":"2.7.6","runtime":"node"}'},
       {id:'config',method:'GET',path:'/api/v1/config',description:'Backend, sumber pencarian, ketersediaan lirik, serta kemampuan pemutar.',params:[],sample:'/api/v1/config',code:'{"name":"Aurelis Symphony","searchProviders":["youtube","catalog"],"player":"HTML5 Audio (no embed)"}'},
       {id:'status',method:'GET',path:'/api/v2/status',description:'Status eksperimen audio: engine, jumlah koneksi aktif, kode kegagalan terakhir.',params:[],sample:'/api/v2/status',code:'{"ok":true,"stream":{"engines":{"primary":"youtubei.js","fallback":"@distube/ytdl-core"}}}'}
     ]},
