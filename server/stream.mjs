@@ -5,7 +5,7 @@
 import { once } from 'node:events';
 import { Script } from 'node:vm';
 import { Innertube, Platform } from 'youtubei.js';
-import { fallbackAudio } from './ytdl-fallback.mjs';
+import { fallbackAudio, parseByteRange } from './ytdl-fallback.mjs';
 import { contentDisposition } from './download.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
@@ -16,6 +16,7 @@ const STREAM_ENABLED = process.env.AURELIS_DIRECT_AUDIO !== 'false';
 const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL === 'true';
 let active = 0;
 let clientPromise;
+const formatPending = new Map();
 const ALTERNATE_ENABLED = process.env.AURELIS_YTDL_FALLBACK !== 'false';
 const stats = { ok:0, failed:0, lastError:null, lastAt:null, lastEngine:null, alternativeSuccess:0 };
 
@@ -58,7 +59,10 @@ function json(res, status, data) {
 }
 async function tube() {
   if (!clientPromise) {
-    clientPromise = Innertube.create({ lang:'en', generate_session_locally: true })
+    clientPromise = Innertube.create({ lang:'en', generate_session_locally: true, fetch: (input, init) => {
+      const signals = [AbortSignal.timeout(12000), init?.signal, input instanceof Request ? input.signal : null].filter(Boolean);
+      return fetch(input,{...init,signal:AbortSignal.any(signals)});
+    } })
       .catch(error => { clientPromise = null; throw error; });
   }
   return clientPromise;
@@ -66,6 +70,13 @@ async function tube() {
 async function formatFor(id, force = false) {
   const hit = formatCache.get(id);
   if (!force && hit && hit.expires > Date.now()) return hit.url;
+  if (formatPending.has(id)) return formatPending.get(id);
+  const pending = resolveFormat(id);
+  formatPending.set(id,pending);
+  try { return await pending; }
+  finally { if(formatPending.get(id)===pending) formatPending.delete(id); }
+}
+async function resolveFormat(id) {
   const yt = await tube();
   let format;
   try {
@@ -112,6 +123,21 @@ async function upstreamFetch(url, range, signal) {
   }
   throw makeError('upstream_redirect_limit', 'Redirect sumber audio terlalu banyak.');
 }
+// Validate the returned byte interval before committing downstream headers.
+export function verifyContentRange(headers, range) {
+  const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(headers.get('content-range') || '');
+  if (!match) throw makeError('range_invalid','Sumber mengembalikan Content-Range yang tidak valid.');
+  const [start,end,total] = match.slice(1).map(Number);
+  const expected = parseByteRange(range,total);
+  if (!expected || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+      start!==expected.start || end!==expected.end) {
+    throw makeError('range_mismatch','Sumber mengembalikan rentang byte yang berbeda dari permintaan.');
+  }
+  const length = headers.get('content-length');
+  if (length!==null && Number(length)!==end-start+1)
+    throw makeError('range_mismatch','Sumber mengembalikan panjang audio yang tidak sesuai rentang.');
+  return {start,end,total};
+}
 function inspect(response, range) {
   if (response.status===403 || response.status===410) throw makeError('source_denied','Sumber menolak akses audio (403/410).');
   if (![200,206].includes(response.status) || !response.body) {
@@ -120,9 +146,7 @@ function inspect(response, range) {
   if (range && response.status!==206) {
     throw makeError('range_not_supported','Sumber tidak mengizinkan seek/range audio.');
   }
-  if (response.status===206 && !/^bytes \d+-\d+\/(?:\d+|\*)$/.test(response.headers.get('content-range') || '')) {
-    throw makeError('range_invalid','Sumber mengembalikan Content-Range yang tidak valid.');
-  }
+  if (response.status===206) verifyContentRange(response.headers,range);
   const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (!/^(audio\/(mp4|mpeg|webm|ogg|aac|x-m4a)|video\/(mp4|webm)|application\/octet-stream)$/.test(type)) {
     throw makeError('invalid_content_type','Sumber tidak mengembalikan format media HTML5.',type);
@@ -206,7 +230,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     if(download)out['Content-Disposition']=contentDisposition(downloadTitle,id,mime);
     // A full download requested without Range must be a 200 response, not a
     // misleading 206 partial response from the upstream bytes=0- request.
-    const clientStatus=download&&!req.headers.range?200:response.status;
+    const clientStatus=!req.headers.range?200:response.status;
     if(clientStatus===200)delete out['Content-Range'];
     if (req.method==='HEAD') { await reader.cancel().catch(()=>{}); res.writeHead(clientStatus,out); return res.end(); }
     res.writeHead(clientStatus,out);
@@ -231,6 +255,12 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
   } catch (primaryError) {
     let e=primaryError;
+    // Release rejected primary response before the alternative opens another connection.
+    if (!started) {
+      if (reader) { await reader.cancel().catch(()=>{}); reader=undefined; }
+      else if (response?.body) await response.body.cancel().catch(()=>{});
+      response=undefined;
+    }
     // Fall back only before any HTTP header or bytes were emitted. Both engines
     // use the exact YouTube video ID chosen by the user (no replacement song).
     if (ALTERNATE_ENABLED && !res.headersSent && !disposed && !abort.signal.aborted) {
@@ -257,11 +287,14 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
       message:e?.message?.startsWith('Sumber') || e?.message?.startsWith('YouTube') || e?.message?.startsWith('Alternatif')
         || e?.message?.startsWith('Engine') || e?.message?.startsWith('Modul')
         ? e.message : 'Streaming audio YouTube belum tersedia pada jaringan ini.',
+      primaryCode:primaryError.code||'primary_unavailable',
+      fallbackCode:e===primaryError?null:(e.code||'fallback_unavailable'),
       enginesTried:ALTERNATE_ENABLED?['youtubei.js','@distube/ytdl-core']:['youtubei.js'],
       retryable:true});
     else { if (!res.destroyed) res.destroy(); }
   } finally {
     active--;
+    abort.abort();
     res.off('close',onClose);
     if (!started && reader) await reader.cancel().catch(()=>{});
     if (!started && !reader && response?.body) await response.body.cancel().catch(()=>{});

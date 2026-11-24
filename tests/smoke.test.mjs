@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { lookupYouTube } from '../server/youtube.mjs';
 import { parseLrc, lyricsToLrc } from '../server/lyrics.mjs';
-import { validSingleRange, allowedMediaHost } from '../server/stream.mjs';
+import { validSingleRange, allowedMediaHost, verifyContentRange } from '../server/stream.mjs';
 import { detectLyricLanguage, translateLyrics } from '../server/translation.mjs';
 import { parseByteRange } from '../server/ytdl-fallback.mjs';
 import { safeFilename, contentDisposition } from '../server/download.mjs';
@@ -39,6 +39,13 @@ test('stream safety and range input', () => {
   assert.equal(allowedMediaHost('https://googlevideo.com.attacker.example/audio'),false);
   assert.equal(allowedMediaHost('http://googlevideo.com/audio'),false);
 });
+test('upstream byte intervals must match request and content length', () => {
+  const headers=(range,length)=>new Headers({'content-range':range,'content-length':String(length)});
+  assert.deepEqual(verifyContentRange(headers('bytes 0-16383/100000',16384),'bytes=0-16383'),{start:0,end:16383,total:100000});
+  assert.deepEqual(verifyContentRange(headers('bytes 500-999/1000',500),'bytes=-500'),{start:500,end:999,total:1000});
+  assert.throws(()=>verifyContentRange(headers('bytes 0-10/1000',11),'bytes=0-'),{code:'range_mismatch'});
+  assert.throws(()=>verifyContentRange(headers('bytes 0-999/1000',5),'bytes=0-'),{code:'range_mismatch'});
+});
 test('translation language detection and strict input', async () => {
   assert.equal(detectLyricLanguage('君といっしょに'), 'ja');
   assert.equal(detectLyricLanguage('안녕하세요'), 'ko');
@@ -68,7 +75,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(up, true, 'server starts');
-    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.7.2');
+    assert.equal((await (await fetch(base + '/api/v1/health')).json()).version, '2.7.3');
     const homepage=await (await fetch(base + '/')).text();
     assert.match(homepage,/assets\/v21\.js/);
     assert.match(homepage,/assets\/full-player\.js/);
@@ -100,7 +107,7 @@ test('HTTP smoke test: health, demos, native playback descriptor, byte ranges', 
     assert.equal((await fetch(base+'/assets/motion-v27.js')).status,200);
     assert.match(homepage,/assets\/motion-v27\.js/);
     const openapi=await (await fetch(base+'/api/v1/openapi.json')).json();
-    assert.equal(openapi.info.version,'2.7.2');
+    assert.equal(openapi.info.version,'2.7.3');
     assert.ok(openapi.paths['/api/v2/playback/{id}']);
     assert.ok(openapi.paths['/api/v2/romanize']);
     assert.ok(openapi.paths['/api/v1/playlists/import']);

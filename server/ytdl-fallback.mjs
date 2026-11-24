@@ -104,8 +104,8 @@ export async function fallbackAudio({id,req,res,range,probe,download=false,downl
       if(rangeInfo){
         h['Content-Range']='bytes '+rangeInfo.start+'-'+rangeInfo.end+'/'+length;
         h['Content-Length']=String(rangeInfo.end-rangeInfo.start+1);
-      }else if(knownLength)h['Content-Length']=String(length);
-      const headStatus=download&&!req.headers.range?200:(rangeInfo?206:200);
+      }else if(knownLength&&format.url)h['Content-Length']=String(length);
+      const headStatus=!req.headers.range?200:(rangeInfo?206:200);
       if(headStatus===200)delete h['Content-Range'];
       res.writeHead(headStatus,h);res.end();return {ok:true,engine:'@distube/ytdl-core'};
     }
@@ -119,10 +119,10 @@ export async function fallbackAudio({id,req,res,range,probe,download=false,downl
     if(rangeInfo){
       headers['Content-Range']='bytes '+rangeInfo.start+'-'+rangeInfo.end+'/'+length;
       headers['Content-Length']=String(rangeInfo.end-rangeInfo.start+1);
-    }else if(knownLength){
+    }else if(knownLength&&format.url){
       headers['Content-Length']=String(length);
     }
-    const clientStatus=download&&!req.headers.range?200:(rangeInfo?206:200);
+    const clientStatus=!req.headers.range?200:(rangeInfo?206:200);
     if(clientStatus===200)delete headers['Content-Range'];
     res.writeHead(clientStatus,headers);
     let count=0;

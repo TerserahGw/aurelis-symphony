@@ -1,4 +1,8 @@
-# ✦ Aurelis Symphony 2.7.2
+# ✦ Aurelis Symphony 2.7.3
+
+## New in v2.7.3
+
+- Playback stability: metadata-only YouTube sessions do not retrieve the player, playlist import concurrency and cache are reduced for small hosts, simultaneous lookups for the same audio ID are coalesced, rejected upstream connections are released before fallback, and byte range/length mismatches are detected before sending downstream headers. Audio diagnostics now report both engine error codes. Existing audio engines and playlist endpoint are preserved. Upstream availability is not guaranteed.
 
 ## New in v2.7.2
 
@@ -41,7 +45,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.2` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.3` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

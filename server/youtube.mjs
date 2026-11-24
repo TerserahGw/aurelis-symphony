@@ -72,7 +72,7 @@ function gather(root, limit = 100) {
 }
 async function client() {
   if (!clientPromise) clientPromise = import('youtubei.js').then(async ({ Innertube }) =>
-    Innertube.create({ lang: 'en', generate_session_locally: true })).catch(err => { clientPromise = null; throw err; });
+    Innertube.create({ lang: 'en', generate_session_locally: true, retrieve_player: false })).catch(err => { clientPromise = null; throw err; });
   return clientPromise;
 }
 function timeout(promise, ms = 12000) {
@@ -244,7 +244,7 @@ export async function importPlaylist(id, limit = 1000) {
   const key = id + ':' + limit;
   const cached = playlistCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.result;
-  if (activePlaylistImports >= 2) {
+  if (activePlaylistImports >= 1) {
     const e = new Error('Playlist importer busy'); e.status = 429; throw e;
   }
   activePlaylistImports++;
@@ -253,7 +253,7 @@ export async function importPlaylist(id, limit = 1000) {
   try {
     const yt = await boundedRequest(client());
     const result = await collectPlaylist(yt, id, limit, boundedRequest);
-    if (playlistCache.size >= 12) playlistCache.delete(playlistCache.keys().next().value);
+    if (playlistCache.size >= 4) playlistCache.delete(playlistCache.keys().next().value);
     playlistCache.set(key, {result, expires:Date.now()+TTL});
     return result;
   } finally { activePlaylistImports--; }
