@@ -9,9 +9,10 @@ import { createRadio } from './server/recommend.mjs';
 import { findLyrics, allLyrics, lyricsToLrc, LYRIC_SOURCES } from './server/lyrics.mjs';
 import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
+import { audioAuthGate } from './server/audio-auth.mjs';
 import { romanizeBatch } from './server/romanize.mjs';
 
-const APP_VERSION = '2.7.4';
+const APP_VERSION = '2.7.5';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));
@@ -287,6 +288,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   let url;
   try { url = new URL(req.url, 'http://localhost'); } catch { return apiError(res, 400, 'bad_url', 'Invalid URL.', head); }
+  if(audioAuthGate(req,res,url.pathname))return;
   const isApi = url.pathname.startsWith('/api/') || url.pathname === '/health';
   if (isApi && !['GET', 'HEAD'].includes(req.method) && !(url.pathname === '/api/v1/library' && req.method === 'PUT') && !(url.pathname === '/api/v2/translate' && req.method === 'POST') && !(url.pathname === '/api/v2/romanize' && req.method === 'POST'))
     return apiError(res, 405, 'method_not_allowed', 'Unsupported method.', head);

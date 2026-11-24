@@ -1,8 +1,9 @@
 // Optional second engine for the same YouTube video selected by youtubei.js.
-// Uses @distube/ytdl-core 5.x. No other catalog, no auth cookies, no DRM bypass.
+// Uses @distube/ytdl-core 5.x. Optional private account authentication; no other catalog or DRM bypass.
 // The module is imported lazily because its player discovery can be CPU-intensive.
 import { once } from 'node:events';
 import { contentDisposition } from './download.mjs';
+import { youtubeCookie, authStatus } from './audio-auth.mjs';
 
 let enginePromise;
 let engine;
@@ -30,7 +31,7 @@ function upstreamError(code, message, detail) {
 async function getEngine() {
   if(!enginePromise) {
     enginePromise=import('@distube/ytdl-core').then(mod=>{
-      engine={client:new mod.Ytdl({lang:'en',timeoutMs:18_000}), Quality:mod.Quality};
+      engine={client:new mod.Ytdl({lang:'en',timeoutMs:18_000,...(youtubeCookie()?{cookie:youtubeCookie()}:{})}), Quality:mod.Quality};
       return engine;
     }).catch(e=>{enginePromise=null;throw e;});
   }
@@ -48,7 +49,7 @@ export async function fallbackAudio({id,req,res,range,probe,download=false,downl
       throw upstreamError('youtube_bot_challenge',
         'YouTube meminta verifikasi anti-bot dari IP server. Audio tidak tersedia tanpa sesi yang diizinkan.',detail);
     }
-    throw upstreamError('alternate_lookup_failed','Modul alternatif tidak mendapatkan informasi audio YouTube.',detail);
+    throw upstreamError('alternate_lookup_failed','Modul alternatif tidak mendapatkan informasi audio YouTube.',authStatus().enabled?'':detail);
   }
   const formats=(info?.formats || []).filter(f => f?.hasAudio===true && f?.hasVideo===false
     && !f.isDrm && !f.isLive && !f.isOtf && ['mp4','webm'].includes(f.container));

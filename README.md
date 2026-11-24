@@ -1,4 +1,9 @@
-# ✦ Aurelis Symphony 2.7.4
+# ✦ Aurelis Symphony 2.7.5
+
+## New in v2.7.5
+
+- Optional private signed-in audio sessions for YouTube.js and @distube/ytdl-core, using administrator-provided credentials only for authorized content. Cookies are never returned by the API; when enabled, browser entry and streaming routes require HTTP Basic authentication. Search and playlist metadata remain public.
+- Optional anonymous yt-dlp 2026.11.23 resolver, bounded to one process, with no shell or runtime auto-update. Used only for ordinary format failures, not explicit access verification. The existing exact-ID audio and authorized HTTPS origin remain supported. No promise of YouTube catalog availability.
 
 ## New in v2.7.4
 
@@ -49,7 +54,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.4` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.5` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

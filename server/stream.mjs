@@ -1,5 +1,5 @@
 // Aurelis v2.2 experimental native-audio proxy for accessible YouTube.js formats.
-// No cookies, DRM bypass, CAPTCHA solving, PoToken forging, or arbitrary URL proxy.
+// Optional private account authentication; no DRM bypass, CAPTCHA solving, or arbitrary URL proxy.
 // Status and diagnostics use HTTP 424 (Failed Dependency) to distinguish an
 // unavailable upstream format from an origin crash / reverse-proxy HTTP 502.
 import { once } from 'node:events';
@@ -8,6 +8,8 @@ import { Innertube, Platform } from 'youtubei.js';
 import { fallbackAudio, parseByteRange } from './ytdl-fallback.mjs';
 import { contentDisposition } from './download.mjs';
 import { relayOwnedAudio, ownedAudioStatus } from './owned-audio.mjs';
+import { youtubeCookie, authStatus } from './audio-auth.mjs';
+import { ytdlpEnabled, resolveYtdlp, isAccessChallenge } from './ytdlp-resolver.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 const FORMAT_TTL = 90_000;
@@ -51,6 +53,7 @@ function makeError(code, message, detail) {
   return error;
 }
 function redact(error) {
+  if(authStatus().enabled)return '[private upstream diagnostic withheld]';
   const msg = String(error?.message || error).slice(0, 150);
   return msg.replace(/https?:\/\/\S+/g, '[upstream-url]');
 }
@@ -61,7 +64,7 @@ function json(res, status, data) {
 }
 async function tube() {
   if (!clientPromise) {
-    clientPromise = Innertube.create({ lang:'en', generate_session_locally: true, fetch: (input, init) => {
+    clientPromise = Innertube.create({ lang:'en', generate_session_locally: true, ...(youtubeCookie()?{cookie:youtubeCookie()}:{}), fetch: (input, init) => {
       const signals = [AbortSignal.timeout(12000), init?.signal, input instanceof Request ? input.signal : null].filter(Boolean);
       return fetch(input,{...init,signal:AbortSignal.any(signals)});
     } })
@@ -71,7 +74,7 @@ async function tube() {
 }
 async function formatFor(id, force = false) {
   const hit = formatCache.get(id);
-  if (!force && hit && hit.expires > Date.now()) return hit.url;
+  if (!force && hit && hit.expires > Date.now()) return hit.format;
   if (formatPending.has(id)) return formatPending.get(id);
   const pending = resolveFormat(id);
   formatPending.set(id,pending);
@@ -79,24 +82,25 @@ async function formatFor(id, force = false) {
   finally { if(formatPending.get(id)===pending) formatPending.delete(id); }
 }
 async function resolveFormat(id) {
-  const yt = await tube();
-  let format;
+  let resolved;
   try {
-    format = await yt.getStreamingData(id, { type:'audio', quality:'best', format:'mp4' });
-  } catch (first) {
-    try {
-      format = await yt.getStreamingData(id, { type:'audio', quality:'best', format:'any' });
-    } catch (second) {
-      throw makeError('format_unavailable',
-        'YouTube.js tidak memberikan format audio yang dapat diputar.', redact(second));
+    const yt = await tube();
+    let format;
+    try { format = await yt.getStreamingData(id,{type:'audio',quality:'best',format:'mp4'}); }
+    catch(first){
+      if(isAccessChallenge(first))throw makeError('youtube_access_required','YouTube requires verification or restricted access.');
+      format = await yt.getStreamingData(id,{type:'audio',quality:'best',format:'any'});
     }
-  }
-  if (!allowedMediaHost(format?.url)) {
-    throw makeError('format_unsupported', 'Format audio tidak tersedia sebagai HTTP audio biasa.');
+    if(!allowedMediaHost(format?.url))throw makeError('format_unsupported','Format audio tidak tersedia sebagai HTTP audio biasa.');
+    resolved={url:format.url,engine:'youtubei.js'};
+  }catch(e){
+    if(e.code==='youtube_access_required'||isAccessChallenge(e))throw makeError('youtube_access_required','YouTube requires verification or restricted access.');
+    if(!ytdlpEnabled||authStatus().enabled)throw makeError('format_unavailable','YouTube.js tidak memberikan format audio yang dapat diputar.',redact(e));
+    resolved={url:await resolveYtdlp(id),engine:'yt-dlp'};
   }
   if (formatCache.size > 60) formatCache.delete(formatCache.keys().next().value);
-  formatCache.set(id, { url:format.url, expires:Date.now()+FORMAT_TTL });
-  return format.url;
+  formatCache.set(id, { format:resolved, expires:Date.now()+FORMAT_TTL });
+  return resolved;
 }
 async function upstreamFetch(url, range, signal) {
   for (let redirects=0; redirects<3; redirects++) {
@@ -161,11 +165,11 @@ function pathId(path) {
 export function directAudioStatus() {
   return {
     enabled: STREAM_ENABLED, mode:'experimental-native-audio',
-    active, maxConcurrent:MAX_STREAMS, ownedAudio:ownedAudioStatus(),
+    active, maxConcurrent:MAX_STREAMS, ownedAudio:ownedAudioStatus(), authentication:authStatus(),
     upstreamCooldownSeconds:Math.max(0,Math.ceil((upstreamCooldownUntil-Date.now())/1000)),
     evaluatorEnabled:DECIPHER_ENABLED,
     evaluator:'node-vm-limited',
-    engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled'},
+    engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled',ytDlp:ytdlpEnabled&&!authStatus().enabled?'enabled':'disabled'},
     lastEngine:stats.lastEngine, alternativeSuccess:stats.alternativeSuccess,
     probe:'GET /api/v2/audio/:id?probe=1',
     successfulResponses:stats.ok,
@@ -196,14 +200,14 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
       res.setHeader('Retry-After',String(Math.ceil((upstreamCooldownUntil-Date.now())/1000)));
       return json(res,503,{ok:false,code:'youtube_cooldown',message:'YouTube recently required bot verification. No authorized audio source is configured for this track.',retryable:true});
     }
-    let url = await formatFor(id);
+    let format = await formatFor(id);
     // Stale signed format URLs are refreshed once. No attestation bypass.
     for (let attempt=0; attempt<2; attempt++) {
-      response = await upstreamFetch(url,range,abort.signal);
+      response = await upstreamFetch(format.url,range,abort.signal);
       if (![403,410].includes(response.status) || attempt===1) break;
       await response.body?.cancel();
       formatCache.delete(id);
-      url = await formatFor(id,true);
+      format = await formatFor(id,true);
     }
     const mime = inspect(response,range);
     reader = response.body.getReader();
@@ -221,8 +225,8 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
     if (probe) {
       await reader.cancel().catch(()=>{});
-      stats.ok++; stats.lastEngine='youtubei.js';
-      return json(res,200,{ok:true,mode:'experimental-native-audio',mime,rangeSupported:response.status===206,
+      stats.ok++; stats.lastEngine=format.engine;
+      return json(res,200,{ok:true,mode:'experimental-native-audio',engine:format.engine,mime,rangeSupported:response.status===206,
         firstBytes:first.value.byteLength,codecAvailability:'unverified'});
     }
     const out = {
@@ -258,7 +262,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
       if (out['Content-Length'] && bytes!==Number(out['Content-Length'])) {
         throw makeError('truncated_upstream','Transfer audio terhenti sebelum seluruh byte terkirim.');
       }
-      stats.ok++;stats.lastEngine='youtubei.js';
+      stats.ok++;stats.lastEngine=format.engine;
       res.end();
     }
   } catch (primaryError) {
@@ -271,7 +275,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
     // Fall back only before any HTTP header or bytes were emitted. Both engines
     // use the exact YouTube video ID chosen by the user (no replacement song).
-    if (ALTERNATE_ENABLED && !res.headersSent && !disposed && !abort.signal.aborted) {
+    if (ALTERNATE_ENABLED && primaryError.code!=='youtube_access_required' && !res.headersSent && !disposed && !abort.signal.aborted) {
       try {
         const alternate=await fallbackAudio({id,req,res,range,probe,download,downloadTitle,signal:abort.signal});
         stats.ok++;
@@ -289,16 +293,16 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
     stats.failed++;
     stats.lastError=e.code || 'audio_error';
-    if(stats.lastError==='youtube_bot_challenge')upstreamCooldownUntil=Date.now()+60000;
+    if(['youtube_bot_challenge','youtube_access_required'].includes(stats.lastError))upstreamCooldownUntil=Date.now()+60000;
     stats.lastAt=new Date().toISOString();
-    console.warn('[aurelis-audio]',id,stats.lastError,redact(e),e.detail || '');
+    console.warn('[aurelis-audio]',id,stats.lastError,redact(e),authStatus().enabled?'':(e.detail || ''));
     if (!res.headersSent) json(res,424,{ok:false,code:stats.lastError,
       message:e?.message?.startsWith('Sumber') || e?.message?.startsWith('YouTube') || e?.message?.startsWith('Alternatif')
         || e?.message?.startsWith('Engine') || e?.message?.startsWith('Modul')
         ? e.message : 'Streaming audio YouTube belum tersedia pada jaringan ini.',
       primaryCode:primaryError.code||'primary_unavailable',
       fallbackCode:e===primaryError?null:(e.code||'fallback_unavailable'),
-      enginesTried:ALTERNATE_ENABLED?['youtubei.js','@distube/ytdl-core']:['youtubei.js'],
+      enginesConfigured:['youtubei.js',...(ytdlpEnabled&&!authStatus().enabled?['yt-dlp']:[]),...(ALTERNATE_ENABLED?['@distube/ytdl-core']:[])],
       retryable:true});
     else { if (!res.destroyed) res.destroy(); }
   } finally {
