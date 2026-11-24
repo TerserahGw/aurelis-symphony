@@ -1,4 +1,8 @@
-# ✦ Aurelis Symphony 2.7.3
+# ✦ Aurelis Symphony 2.7.4
+
+## New in v2.7.4
+
+- Direct audio from administrator-owned or licensed sources: mount audio files under `AURELIS_AUDIO_DIR` or configure a trusted HTTPS `AURELIS_AUDIO_ORIGIN`. Exact video IDs select files; existing stream and probe URLs stay compatible. No embed, arbitrary URL proxy, or third-party catalog substitution. YouTube-only tracks still depend on upstream availability. A 60-second cooldown avoids hammering YouTube after explicit bot verification.
 
 ## New in v2.7.3
 
@@ -45,7 +49,7 @@ Online discovery uses YouTube.js; native streaming is attempted via `youtubei.js
 
 ## Docker image / Altare
 
-After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.3` on port **8080**, preserving the current domain. Suggested variables:
+After CI publishes, deploy `ghcr.io/terserahgw/aurelis-symphony:2.7.4` on port **8080**, preserving the current domain. Suggested variables:
 
 ```env
 HOST=0.0.0.0

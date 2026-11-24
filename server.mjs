@@ -11,7 +11,7 @@ import { relayAudio, directAudioStatus } from './server/stream.mjs';
 import { translateLyrics } from './server/translation.mjs';
 import { romanizeBatch } from './server/romanize.mjs';
 
-const APP_VERSION = '2.7.3';
+const APP_VERSION = '2.7.4';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(ROOT, 'src/main/resources/web');
 const DATA = path.resolve(process.env.AURELIS_DATA_DIR || path.join(ROOT, 'data'));

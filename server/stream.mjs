@@ -7,6 +7,7 @@ import { Script } from 'node:vm';
 import { Innertube, Platform } from 'youtubei.js';
 import { fallbackAudio, parseByteRange } from './ytdl-fallback.mjs';
 import { contentDisposition } from './download.mjs';
+import { relayOwnedAudio, ownedAudioStatus } from './owned-audio.mjs';
 
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 const FORMAT_TTL = 90_000;
@@ -15,6 +16,7 @@ const MAX_STREAMS = Math.min(12, Math.max(1, Number(process.env.AURELIS_MAX_STRE
 const STREAM_ENABLED = process.env.AURELIS_DIRECT_AUDIO !== 'false';
 const DECIPHER_ENABLED = process.env.AURELIS_STREAM_EVAL === 'true';
 let active = 0;
+let upstreamCooldownUntil=0;
 let clientPromise;
 const formatPending = new Map();
 const ALTERNATE_ENABLED = process.env.AURELIS_YTDL_FALLBACK !== 'false';
@@ -159,7 +161,8 @@ function pathId(path) {
 export function directAudioStatus() {
   return {
     enabled: STREAM_ENABLED, mode:'experimental-native-audio',
-    active, maxConcurrent:MAX_STREAMS,
+    active, maxConcurrent:MAX_STREAMS, ownedAudio:ownedAudioStatus(),
+    upstreamCooldownSeconds:Math.max(0,Math.ceil((upstreamCooldownUntil-Date.now())/1000)),
     evaluatorEnabled:DECIPHER_ENABLED,
     evaluator:'node-vm-limited',
     engines:{discovery:'youtubei.js',primary:'youtubei.js',fallback:ALTERNATE_ENABLED?'@distube/ytdl-core':'disabled'},
@@ -175,7 +178,6 @@ export function directAudioStatus() {
 export async function relayAudio(req, res, pathname, searchParams = new URLSearchParams()) {
   const id = pathId(pathname);
   if (!VIDEO_ID.test(id)) return json(res,400,{ok:false,code:'invalid_id',message:'ID lagu tidak valid.'});
-  if (!STREAM_ENABLED) return json(res,403,{ok:false,code:'disabled',message:'Streaming audio eksperimental dimatikan.'});
   if (!validSingleRange(req.headers.range)) return json(res,416,{ok:false,code:'invalid_range',message:'Range audio harus tunggal.'});
   if (active>=MAX_STREAMS) return json(res,429,{ok:false,code:'busy',message:'Sumber audio sedang sibuk, coba lagi.'});
   const probe = searchParams.get('probe')==='1';
@@ -188,6 +190,12 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
   res.on('close',onClose);
   active++;
   try {
+    if(await relayOwnedAudio(req,res,id,searchParams))return;
+    if(!STREAM_ENABLED)return json(res,403,{ok:false,code:'disabled',message:'Streaming audio YouTube eksperimental dimatikan.'});
+    if(Date.now()<upstreamCooldownUntil){
+      res.setHeader('Retry-After',String(Math.ceil((upstreamCooldownUntil-Date.now())/1000)));
+      return json(res,503,{ok:false,code:'youtube_cooldown',message:'YouTube recently required bot verification. No authorized audio source is configured for this track.',retryable:true});
+    }
     let url = await formatFor(id);
     // Stale signed format URLs are refreshed once. No attestation bypass.
     for (let attempt=0; attempt<2; attempt++) {
@@ -281,6 +289,7 @@ export async function relayAudio(req, res, pathname, searchParams = new URLSearc
     }
     stats.failed++;
     stats.lastError=e.code || 'audio_error';
+    if(stats.lastError==='youtube_bot_challenge')upstreamCooldownUntil=Date.now()+60000;
     stats.lastAt=new Date().toISOString();
     console.warn('[aurelis-audio]',id,stats.lastError,redact(e),e.detail || '');
     if (!res.headersSent) json(res,424,{ok:false,code:stats.lastError,
